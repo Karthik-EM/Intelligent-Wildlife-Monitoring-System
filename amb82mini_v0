@@ -1,12 +1,11 @@
 #include <WiFi.h>
-#include <WiFiSSLClient.h>
 #include "StreamIO.h"
 #include "VideoStream.h"
 #include "AudioStream.h"
 #include "AudioEncoder.h"
 #include "MP4Recording.h"
 #include "AmebaFatFS.h"
-#include "sys_api.h" // Required for System Reset
+#include "sys_api.h" 
 
 #define CHANNEL 0
 #define FILENAME "TestRecordingAV.mp4"
@@ -14,14 +13,16 @@
 #define RECORDING_DURATION 10 
 
 // ================= LED DEFINITIONS =================
-#define LED_RECORDING  LED_G  // Green for Recording
-#define LED_WIFI       LED_B  // Blue for WiFi Status
+#define LED_RECORDING  LED_G  
+#define LED_WIFI       LED_B  
 
 // ================= GLOBALS =================
 String config_ssid = "";
 String config_pass = "";
 String config_host = "";
-int server_port = 443;
+
+// Default to Port 5000 (Flask), but you can change logic if needed
+int server_port = 5000;
 
 // Video/Audio Settings
 VideoSetting configV(VIDEO_HD, 15, VIDEO_H264, 0);
@@ -33,8 +34,10 @@ MP4Recording mp4;
 StreamIO audioStreamer(1, 1);
 StreamIO avMixStreamer(2, 1);
 AmebaFatFS fs;
-WiFiSSLClient client;
-WiFiServer server(80); // Web Server for Config Portal
+
+// HTTP Client (Fixed for Flask)
+WiFiClient client;
+WiFiServer server(80); 
 
 // ================= HELPER: LOAD/SAVE CONFIG =================
 
@@ -69,6 +72,10 @@ bool loadConfig() {
         config_pass.trim();
         config_host.trim();
         
+        // SAFETY: Remove http:// or https:// if user typed it
+        config_host.replace("http://", "");
+        config_host.replace("https://", "");
+        
         file.close();
         
         Serial.println("Loaded Config:");
@@ -82,14 +89,11 @@ bool loadConfig() {
     return false;
 }
 
-// ================= CONFIG PORTAL (AP MODE) =================
+// ================= CONFIG PORTAL =================
 
 void startConfigPortal() {
     Serial.println("\n!!! STARTING CONFIG PORTAL !!!");
-    
-    // --- LED LOGIC: SOLID BLUE (Stop blinking, indicate AP Ready) ---
     digitalWrite(LED_WIFI, HIGH); 
-    // --------------------------------------------------------------
 
     Serial.println("1. Connect to WiFi: 'Ameba-Cam-Setup'");
     Serial.println("2. Open Browser: http://192.168.1.1");
@@ -120,6 +124,9 @@ void startConfigPortal() {
                                     String new_pass = request.substring(idx_pass + 6, idx_host);
                                     String new_host = request.substring(idx_host + 6, idx_end);
                                     
+                                    // Decode URL encoding if necessary (Simple replacement)
+                                    new_ssid.replace("%20", " ");
+                                    
                                     saveConfig(new_ssid, new_pass, new_host);
 
                                     client.println("HTTP/1.1 200 OK");
@@ -128,7 +135,6 @@ void startConfigPortal() {
                                     client.println("<h1>Saved! Rebooting...</h1>");
                                     delay(1000);
                                     client.stop();
-                                    
                                     Serial.println("Rebooting...");
                                     NVIC_SystemReset();
                                 }
@@ -141,7 +147,7 @@ void startConfigPortal() {
                                 client.println("<form action='/save' method='GET'>");
                                 client.println("SSID: <input type='text' name='ssid' value='" + config_ssid + "'><br><br>");
                                 client.println("Pass: <input type='text' name='pass' value='" + config_pass + "'><br><br>");
-                                client.println("Ngrok: <input type='text' name='host' value='" + config_host + "'><br><br>");
+                                client.println("Host IP: <input type='text' name='host' value='" + config_host + "'><br><br>");
                                 client.println("<input type='submit' value='Save & Reboot'>");
                                 client.println("</form></html>");
                             }
@@ -163,11 +169,7 @@ void startConfigPortal() {
 
 void stopAllStreaming() {
     Serial.println("--- Stopping All Streaming ---");
-    
-    // --- LED LOGIC: GREEN OFF (Recording Stopped) ---
     digitalWrite(LED_RECORDING, LOW);
-    // ------------------------------------------------
-
     mp4.end();
     delay(500);
     avMixStreamer.pause();
@@ -192,27 +194,20 @@ void connectToWiFi() {
     
     int retries = 0;
     while (WiFi.status() != WL_CONNECTED) {
-        
-        // --- LED LOGIC: BLINK BLUE (Connecting...) ---
         digitalWrite(LED_WIFI, HIGH);
         delay(250);
         digitalWrite(LED_WIFI, LOW);
         delay(250);
-        // ---------------------------------------------
 
         Serial.print(".");
         retries++;
-        if(retries > 30) {  // Increased retries slightly due to delay in blinking
+        if(retries > 30) {
             Serial.println("\nFailed to connect to WiFi.");
             startConfigPortal(); 
             return;
         }
     }
-    
-    // --- LED LOGIC: BLUE OFF (Connected) ---
     digitalWrite(LED_WIFI, LOW);
-    // ---------------------------------------
-
     Serial.println("\nWiFi Connected!");
 }
 
@@ -239,22 +234,26 @@ void uploadVideo() {
     config_host.toCharArray(host_buf, 100);
 
     client.setTimeout(20000);
+
+    // Connecting to Port 5000 (Flask)
     if (client.connect(host_buf, server_port)) {
         Serial.println("Connected to Server!");
     } else {
-        Serial.println("Connection failed!");
+        Serial.println("Connection failed! Check IP.");
         return;
     }
 
     file = fs.open(FILENAME);
     
     String boundary = "---AmebaBoundary";
-    String head = "--" + boundary + "\r\nContent-Disposition: form-data; name=\"video\"; filename=\"" + FILENAME + "\"\r\nContent-Type: video/mp4\r\n\r\n";
+    String head = "--" + boundary + "\r\nContent-Disposition: form-data; name=\"source\"\r\n\r\namb82\r\n";
+    head += "--" + boundary + "\r\nContent-Disposition: form-data; name=\"video\"; filename=\"" + FILENAME + "\"\r\nContent-Type: video/mp4\r\n\r\n";
     String tail = "\r\n--" + boundary + "--\r\n";
+    
     uint32_t totalLen = head.length() + fileSize + tail.length();
 
     client.println("POST /api/video/upload HTTP/1.1");
-    client.println("Host: " + config_host);
+    client.println("Host: " + config_host + ":" + String(server_port));
     client.println("Content-Type: multipart/form-data; boundary=" + boundary);
     client.print("Content-Length: "); client.println(totalLen);
     client.println("Connection: close");
@@ -276,15 +275,16 @@ void uploadVideo() {
     Serial.println("\nFile Sent.");
     client.print(tail);
     client.flush();
-
-    Serial.println("Waiting for response...");
-    while (client.connected()) {
-        String line = client.readStringUntil('\n');
-        if (line == "\r") break;
-    }
-    String response = client.readString();
-    Serial.println("Server Response: " + response);
+    //send and forget
+    // Serial.println("Waiting for response...");
+    // hile (client.connected() || client.available()) {
+    //    if (client.available()) {
+    //         String line = client.readStringUntil('\n');
+    //        Serial.println(line);
+    //     }
+    // }
     client.stop();
+    Serial.println("Upload Complete.");
 }
 
 // ================= MAIN SETUP =================
@@ -292,12 +292,10 @@ void uploadVideo() {
 void setup() {
     Serial.begin(115200);
     
-    // --- LED LOGIC: INITIALIZATION ---
     pinMode(LED_RECORDING, OUTPUT);
     pinMode(LED_WIFI, OUTPUT);
     digitalWrite(LED_RECORDING, LOW);
     digitalWrite(LED_WIFI, LOW);
-    // ---------------------------------
     
     // 1. Init SD Card
     if (!fs.begin()) {
@@ -305,7 +303,7 @@ void setup() {
         while(1);
     }
 
-    // 2. Load Configuration
+    // 2. Load Configuration (RESTORED)
     if (!loadConfig()) {
         Serial.println("No Config Found. Starting Config Portal...");
         startConfigPortal(); 
@@ -313,10 +311,7 @@ void setup() {
 
     // 3. Record Video
     Serial.println("--- Starting Recording Sequence ---");
-    
-    // --- LED LOGIC: GREEN ON (Recording Start) ---
     digitalWrite(LED_RECORDING, HIGH);
-    // ---------------------------------------------
 
     Camera.configVideoChannel(CHANNEL, configV);
     Camera.videoInit();
@@ -346,10 +341,10 @@ void setup() {
     
     delay((RECORDING_DURATION + 5) * 1000);
     
-    stopAllStreaming(); // LED turns OFF inside this function
+    stopAllStreaming(); 
 
     // 4. Connect & Upload
-    connectToWiFi(); // Blinks Blue here, then turns off on success
+    connectToWiFi(); 
     uploadVideo();
 }
 
