@@ -234,7 +234,19 @@
         .modal.active { display: flex; animation: fadeIn 0.3s; }
         .modal-img { max-width: 90%; max-height: 85vh; border-radius: 12px; box-shadow: 0 20px 60px rgba(0,0,0,0.2); }
         .close-modal { position: absolute; top: 30px; right: 30px; width: 40px; height: 40px; background: #1a1a1a; color: #fff; border-radius: 50%; display: flex; align-items: center; justify-content: center; cursor: pointer; font-size: 1.5rem; }
-
+/* Confidence Score Badge */
+.conf-badge {
+    display: block;
+    font-size: 0.75rem;
+    margin-top: 4px;
+    font-weight: 700;
+    padding: 2px 6px;
+    border-radius: 4px;
+}
+/* Color coding based on confidence level */
+.conf-high { color: #2e7d32; background: #e8f5e9; } /* Green */
+.conf-med  { color: #f57f17; background: #fff3e0; } /* Orange */
+.conf-low  { color: #c62828; background: #ffebee; } /* Red */
     </style>
 </head>
 <body>
@@ -384,61 +396,104 @@
             renderResults(data.detections);
         }
 
-        function renderResults(detections) {
-            const container = document.getElementById('resultsGrid');
-            container.innerHTML = '';
+    function renderResults(detections) {
+    const container = document.getElementById('resultsGrid');
+    container.innerHTML = '';
 
-            if (!detections || detections.length === 0) {
-                container.innerHTML = '<div style="text-align:center; color:#aaa; padding:2rem;">No biological entities detected.</div>';
-                return;
-            }
+    if (!detections || detections.length === 0) {
+        container.innerHTML = '<div style="text-align:center; color:#aaa; padding:2rem;">No biological entities detected.</div>';
+        return;
+    }
 
-            // Group by Species
-            const bySpecies = {};
-            detections.forEach(d => {
-                if (!bySpecies[d.species]) bySpecies[d.species] = [];
-                bySpecies[d.species].push(d);
-            });
+    // 1. FILTERING LOGIC
+    // Sort by time first
+    detections.sort((a, b) => a.time - b.time);
 
-            // Create Sections
-            for (const [species, dets] of Object.entries(bySpecies)) {
-                dets.sort((a, b) => a.time - b.time);
+    const visibleDetections = [];
+    const lastSeenMap = {}; // Tracks last time we saw EACH species
+    const TIME_THRESHOLD = 5; // Seconds to wait before showing SAME species
 
-                const section = document.createElement('div');
-                section.className = 'species-group';
-                
-                let html = `
-                    <div class="species-label">
-                        ${species}
-                        <span class="count-badge">${dets.length}</span>
-                    </div>
-                    <div class="thumbs-row">
-                `;
+    detections.forEach(d => {
+        // A. REMOVE LOW CONFIDENCE ( < 70% )
+        const conf = d.confidence || 0;
+        if (conf <= 0.5) return;
 
-                dets.forEach(d => {
-                    const timeLabel = formatTime(d.time);
-                    const imgUrl = d.image_url ? (d.image_url.startsWith('/') ? d.image_url : '/' + d.image_url) : '';
+        // B. REMOVE CLUTTER (Time Check)
+        const lastTime = lastSeenMap[d.species] || -999;
 
-                    html += `
-                        <div class="thumb-card">
-                            <img src="${imgUrl}" 
-                                 class="thumb-img" 
-                                 onclick="openModal('${imgUrl}')" 
-                                 loading="lazy"
-                                 onerror="this.onerror=null; this.src='https://placehold.co/150x100?text=No+Img';">
-                            <div class="thumb-meta">
-                                <button class="seek-btn" onclick="seekVideo(${d.time})">▶ ${timeLabel}</button>
-                            </div>
-                        </div>
-                    `;
-                });
-
-                html += `</div>`;
-                section.innerHTML = html;
-                container.appendChild(section);
-            }
+        // Only add if time gap > 5s
+        if ((d.time - lastTime) > TIME_THRESHOLD) {
+            visibleDetections.push(d);
+            lastSeenMap[d.species] = d.time; 
         }
+    });
 
+    if (visibleDetections.length === 0) {
+        container.innerHTML = '<div style="text-align:center; color:#aaa; padding:2rem;">No high-confidence detections found.</div>';
+        return;
+    }
+
+    // 2. RENDERING LOGIC
+    const bySpecies = {};
+    visibleDetections.forEach(d => {
+        if (!bySpecies[d.species]) bySpecies[d.species] = [];
+        bySpecies[d.species].push(d);
+    });
+
+    for (const [species, dets] of Object.entries(bySpecies)) {
+        dets.sort((a, b) => a.time - b.time);
+
+        const section = document.createElement('div');
+        section.className = 'species-group';
+        
+        let html = `
+            <div class="species-label">
+                ${species}
+                <span class="count-badge">${dets.length} events</span>
+            </div>
+            <div class="thumbs-row">
+        `;
+
+        dets.forEach(d => {
+            const timeLabel = formatTime(d.time);
+            const imgUrl = d.image_url ? (d.image_url.startsWith('/') ? d.image_url : '/' + d.image_url) : '';
+            
+            // Calculate Percentage
+            const rawConf = d.confidence || 0;
+            const confPercent = Math.round(rawConf * 100);
+
+            // --- DYNAMIC COLOR LOGIC ---
+            let confClass = 'conf-low'; // Default Red
+            if (rawConf > 0.85) {
+                confClass = 'conf-high'; // Green for > 85%
+            } else if (rawConf > 0.70) {
+                confClass = 'conf-med';  // Orange for 70-85%
+            }
+
+            html += `
+                <div class="thumb-card">
+                    <img src="${imgUrl}" 
+                         class="thumb-img" 
+                         onclick="openModal('${imgUrl}')" 
+                         loading="lazy"
+                         onerror="this.onerror=null; this.src='https://placehold.co/150x100?text=No+Img';">
+                    <div class="thumb-meta">
+                        <button class="seek-btn" onclick="seekVideo(${d.time})">▶ ${timeLabel}</button>
+                        
+                        <span class="conf-badge ${confClass}">
+                            ${confPercent}% Match
+                        </span>
+
+                    </div>
+                </div>
+            `;
+        });
+
+        html += `</div>`;
+        section.innerHTML = html;
+        container.appendChild(section);
+    }
+}
         function seekVideo(seconds) {
             const player = document.getElementById('mainPlayer');
             player.currentTime = seconds;
