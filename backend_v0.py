@@ -492,7 +492,14 @@ def get_history():
     videos = VideoRecord.query.order_by(VideoRecord.upload_time.desc()).all()
     output = []
     for v in videos:
-        dets = [{"species": d.species, "time": d.timestamp_in_video, "image_url": d.image_url} for d in v.detections]
+        # --- CHANGE IS HERE: Added "confidence": d.confidence ---
+        dets = [{
+            "species": d.species, 
+            "confidence": d.confidence, 
+            "time": d.timestamp_in_video, 
+            "image_url": d.image_url
+        } for d in v.detections]
+        
         output.append({
             "id": v.id, "filename": v.filename,
             "time": v.upload_time, "detections": dets
