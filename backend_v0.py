@@ -9,6 +9,7 @@ import uuid
 import torch
 import gc
 import cv2
+import requests
 from werkzeug.utils import secure_filename
 from flask import Flask, render_template, request, jsonify, send_from_directory
 from flask_cors import CORS
@@ -16,6 +17,22 @@ from threading import Lock
 from flask_sqlalchemy import SQLAlchemy
 from datetime import datetime
 
+from threading import Thread
+from dotenv import load_dotenv
+
+# Load secrets
+load_dotenv()
+TELEGRAM_BOT_TOKEN = os.getenv('TELEGRAM_BOT_TOKEN')
+TELEGRAM_CHAT_ID = os.getenv('TELEGRAM_CHAT_ID')
+
+# --- GLOBAL TRACKERS FOR SENSOR ALERTS ---
+# We store the last time (timestamp) we sent an alert to prevent spam
+sensor_alert_history = {
+    "motion": 0,
+    "tilt": 0,
+    "gunshot": 0
+}
+SENSOR_COOLDOWN = 60  # Seconds to wait before alerting again
 # ==========================================
 # 1. INITIALIZATION & CONFIGURATION
 # ==========================================
@@ -61,6 +78,27 @@ db = SQLAlchemy(app)
 video_processor = None
 
 # ==========================================
+# telegram fuction
+# ==========================================
+def send_telegram_alert(message):
+    """
+    Sends a text-only alert to Telegram.
+    """
+    if not TELEGRAM_BOT_TOKEN or not TELEGRAM_CHAT_ID:
+        return
+
+    try:
+        url = f"https://api.telegram.org/bot{TELEGRAM_BOT_TOKEN}/sendMessage"
+        payload = {
+            "chat_id": TELEGRAM_CHAT_ID, 
+            "text": message, 
+            "parse_mode": "Markdown"
+        }
+        requests.post(url, data=payload)
+        print(f"✅ Telegram sent: {message}")
+    except Exception as e:
+        print(f"❌ Telegram Error: {e}")
+# ==========================================
 # 2. DATABASE MODELS
 # ==========================================
 class VideoRecord(db.Model):
@@ -97,7 +135,7 @@ class BatchVideoProcessor:
         total_frames = int(cap.get(cv2.CAP_PROP_FRAME_COUNT))
         
         if fps == 0: 
-            print("❌ Error: Video FPS is 0. File might be corrupted.")
+            print("❌ Error: Video FPS is 0.")
             return []
 
         frame_interval = int(max(1, fps / sample_fps))
@@ -105,6 +143,10 @@ class BatchVideoProcessor:
         paths_buffer = []
         timestamps_buffer = []
         all_detections = []
+        
+        # Dictionary to track last alert time for each species in THIS video
+        # { 'Cheetah': 12.5, 'Zebra': 45.0 }
+        video_alert_history = {} 
         
         frame_count = 0
 
@@ -125,10 +167,17 @@ class BatchVideoProcessor:
                     timestamps_buffer.append(current_time_sec)
 
                     if len(paths_buffer) >= batch_size:
-                        batch_detections = self._process_batch(paths_buffer, timestamps_buffer, country, min_confidence)
+                        # Pass alert history to batch processor
+                        batch_detections = self._process_batch(
+                            paths_buffer, 
+                            timestamps_buffer, 
+                            country, 
+                            min_confidence,
+                            video_alert_history 
+                        )
                         all_detections.extend(batch_detections)
                         
-                        # Cleanup temp files
+                        # Cleanup
                         for p in paths_buffer:
                             if os.path.exists(p): os.remove(p)
                         paths_buffer = []
@@ -140,7 +189,13 @@ class BatchVideoProcessor:
 
             # Process remaining
             if paths_buffer:
-                batch_detections = self._process_batch(paths_buffer, timestamps_buffer, country, min_confidence)
+                batch_detections = self._process_batch(
+                    paths_buffer, 
+                    timestamps_buffer, 
+                    country, 
+                    min_confidence, 
+                    video_alert_history
+                )
                 all_detections.extend(batch_detections)
                 for p in paths_buffer:
                     if os.path.exists(p): os.remove(p)
@@ -151,13 +206,12 @@ class BatchVideoProcessor:
         print(f"✅ Video processing complete. Found {len(all_detections)} detections.")
         return all_detections
 
-    def _process_batch(self, filepaths, timestamps, country, min_confidence):
+    def _process_batch(self, filepaths, timestamps, country, min_confidence, alert_history):
         if not self.model_manager.model: return []
         
         try:
             path_to_time = {fp: ts for fp, ts in zip(filepaths, timestamps)}
             
-            # Predict
             result = self.model_manager.model.predict(
                 filepaths=filepaths,
                 country=country,
@@ -203,13 +257,28 @@ class BatchVideoProcessor:
                     if os.path.exists(path_key):
                         img = cv2.imread(path_key)
                         if img is not None:
-                            # Resize for web (max width 640)
                             h, w = img.shape[:2]
                             if w > 640:
                                 scale = 640 / w
                                 img = cv2.resize(img, (640, int(h * scale)))
                             cv2.imwrite(save_path, img)
                             image_url = f"/static/detections/{unique_name}"
+                            
+                            # ==========================================
+                            # 🔔 UNIQUE ANIMAL ALERT LOGIC
+                            # ==========================================
+                            # Alert if High Confidence AND (First time seen OR >30s since last alert)
+                            if top_score > 0.75:
+                                last_alert = alert_history.get(common_name, -999)
+                                
+                                if (time_sec - last_alert) > 30:
+                                    msg = f"🐾 *WILDLIFE SIGHTING*\n\n🦁 *Species:* {common_name}\n🎯 *Confidence:* {top_score:.1%}\n⏱️ *Video Time:* {int(time_sec)}s"
+                                    Thread(target=send_telegram_alert, args=(msg,)).start()
+                                    
+                                    # Update history for this species
+                                    alert_history[common_name] = time_sec
+                            # ==========================================
+
                         else:
                             image_url = None
                     else:
@@ -225,7 +294,6 @@ class BatchVideoProcessor:
         except Exception as e:
             print(f"❌ Batch error: {e}")
             return []
-
 # ==========================================
 # 4. MODEL MANAGER
 # ==========================================
@@ -317,7 +385,7 @@ last_status = {
 last_seen = 0
 gunshot_timestamp = 0
 
-def handle_amb82_video(video_file, sample_fps=1, min_conf=0.3, country='IND'):
+def handle_amb82_video(video_file, sample_fps=1, min_conf=0.5, country='IND'):
     filename = secure_filename(f"amb82_{int(time.time())}.mp4")
     file_path = os.path.join(VIDEO_DIR, filename)
     video_file.save(file_path)
@@ -452,13 +520,46 @@ def detect():
 @app.route('/update', methods=['POST'])
 def update():
     global last_status, last_seen, gunshot_timestamp
+    
     data = request.json or {}
-    print(f"📨 ESP: {data}")
-    last_seen = time.time()
+    print(f"📨 ESP Data: {data}")
+    
+    current_time = time.time()
+    last_seen = current_time
+
+    # 1. Update Dashboard Status
     for k in last_status:
         if k in data:
             last_status[k] = data[k]
-            if k == "gunshot" and data[k] == 1: gunshot_timestamp = time.time()
+            if k == "gunshot" and data[k] == 1: 
+                gunshot_timestamp = current_time
+
+    # ==========================================
+    # 🚨 SENSOR ALERT LOGIC (Motion, Tilt, Gunshot)
+    # ==========================================
+    
+    # --- A. MOTION ALERT ---
+    if data.get('motion') == 1:
+        if (current_time - sensor_alert_history['motion']) > SENSOR_COOLDOWN:
+            msg = f"🏃 *MOTION DETECTED* 🏃\n\n⏱️ *Time:* {datetime.now().strftime('%H:%M:%S')}\n📍 *Unit:* Field Cam 01"
+            Thread(target=send_telegram_alert, args=(msg,)).start()
+            sensor_alert_history['motion'] = current_time
+
+    # --- B. TILT ALERT (> 30°) ---
+    tilt_val = data.get('tilt', 0.0)
+    if tilt_val > 30:
+        if (current_time - sensor_alert_history['tilt']) > SENSOR_COOLDOWN:
+            msg = f"⚠️ *DEVICE TILT WARNING* ⚠️\n\n📉 *Angle:* {tilt_val}°\n📍 *Unit:* Field Cam 01\nCheck mounting immediately."
+            Thread(target=send_telegram_alert, args=(msg,)).start()
+            sensor_alert_history['tilt'] = current_time
+
+    # --- C. GUNSHOT ALERT ---
+    if data.get('gunshot') == 1:
+        if (current_time - sensor_alert_history['gunshot']) > SENSOR_COOLDOWN:
+            msg = f"🔥 *GUNSHOT DETECTED* 🔥\n\n⏱️ *Time:* {datetime.now().strftime('%H:%M:%S')}\n📍 *Unit:* Field Cam 01\n*IMMEDIATE ACTION REQUIRED*"
+            Thread(target=send_telegram_alert, args=(msg,)).start()
+            sensor_alert_history['gunshot'] = current_time
+
     return {"status": "ok"}
 
 @app.route('/status')
@@ -489,21 +590,53 @@ def upload_video():
 
 @app.route('/api/history')
 def get_history():
+    # 1. Get all videos
     videos = VideoRecord.query.order_by(VideoRecord.upload_time.desc()).all()
     output = []
+
+    # --- CONFIGURATION (Single Source of Truth) ---
+    CONFIDENCE_THRESHOLD = 0.55  # 70%
+    TIME_GAP_THRESHOLD = 5       # 5 Seconds
+
     for v in videos:
-        # --- CHANGE IS HERE: Added "confidence": d.confidence ---
-        dets = [{
-            "species": d.species, 
-            "confidence": d.confidence, 
-            "time": d.timestamp_in_video, 
-            "image_url": d.image_url
-        } for d in v.detections]
+        # Get all detections for this video
+        raw_detections = v.detections
         
-        output.append({
-            "id": v.id, "filename": v.filename,
-            "time": v.upload_time, "detections": dets
-        })
+        # Sort by timestamp (critical for time filtering)
+        # We sort in Python to be safe, though DB often returns sorted
+        raw_detections.sort(key=lambda x: x.timestamp_in_video)
+
+        clean_detections = []
+        last_seen = {} # { 'Lion': 12.5, 'Zebra': 4.0 }
+
+        for d in raw_detections:
+            # A. Confidence Check
+            if d.confidence < CONFIDENCE_THRESHOLD:
+                continue
+
+            # B. Time/Clutter Check
+            last_time = last_seen.get(d.species, -999)
+            
+            if (d.timestamp_in_video - last_time) > TIME_GAP_THRESHOLD:
+                # Passes filters! Add to list.
+                clean_detections.append({
+                    "species": d.species,
+                    "confidence": d.confidence,
+                    "time": d.timestamp_in_video,
+                    "image_url": d.image_url
+                })
+                # Update last seen
+                last_seen[d.species] = d.timestamp_in_video
+
+        # Only add video to history if it actually has relevant detections
+        if clean_detections:
+            output.append({
+                "id": v.id, 
+                "filename": v.filename,
+                "time": v.upload_time, 
+                "detections": clean_detections
+            })
+            
     return jsonify(output)
 
 @app.route('/uploads/videos/<path:filename>')
