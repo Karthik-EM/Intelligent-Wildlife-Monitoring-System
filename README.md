@@ -148,7 +148,7 @@ WildlifeProject/
 
 ## 6. Running the Server
 
-1. Ensure your Mosquitto MQTT broker is running in the background.
+1. Ensure your Mosquitto MQTT broker is running in the background at port:1883 and host:127.0.0.1
 2. Open your terminal, activate your virtual environment, and run:
 ```powershell
 python app.py
