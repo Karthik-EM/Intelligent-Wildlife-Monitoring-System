@@ -21,13 +21,6 @@ Before installing, ensure your Windows machine has the following:
 
 ## 2. Project Setup
 
-### Create the Project Structure
-Open your terminal (PowerShell) and create your project folder. Run this command inside your new folder to instantly build the required directory structure:
-```powershell
-mkdir templates, static\detections, uploads\videos, temp_inference\frames, speciesnet_model
-
-```
-
 ### Set Up the Virtual Environment
 
 Keep your dependencies isolated by creating a virtual environment:
