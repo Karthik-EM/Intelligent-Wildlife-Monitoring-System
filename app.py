@@ -69,6 +69,17 @@ CORS(app) # Allows front-end to talk to back-end easily
 # Detect if we have a GPU available
 DEVICE = "cuda" if torch.cuda.is_available() else "cpu"
 
+print("\n" + "="*60)
+if DEVICE == "cuda":
+    gpu_name = torch.cuda.get_device_name(0)
+    vram_gb = torch.cuda.get_device_properties(0).total_memory / 1e9
+    print(f"✅ GPU DETECTED AND ACTIVE: {gpu_name}")
+    print(f"✅ TOTAL VRAM: {vram_gb:.2f} GB")
+else:
+    print("❌ NO GPU DETECTED! PyTorch is falling back to the slow CPU.")
+    print("⚠️  Check your CUDA installation and PyTorch version.")
+print("="*60 + "\n")
+
 print(f"📂 WORKING DIR: {BASE_DIR}")
 print(f"🖥️ MAIN AI DEVICE: {DEVICE}")
 
@@ -798,7 +809,7 @@ if __name__ == '__main__':
 
     print(f"\n{'='*60}")
     print(f"🌐 LOCAL URL: http://127.0.0.1:5000")
-    print(f"🌐 TEST URL:  http://127.0.0.1:5000/test")
+   # print(f"🌐 TEST URL:  http://127.0.0.1:5000/test")
     print(f"{'='*60}\n")
     
     # 3. Start the Flask web server
