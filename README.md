@@ -1,7 +1,7 @@
 
 # Intelligent Wildlife Monitoring System
 
-This project integrates Google’s SpeciesNet (GPU-accelerated via PyTorch) for wildlife classification with a CPU-based weapon detection model (ONNX Runtime) and a real-time MQTT sensor dashboard to monitor remote field cameras, detect threats, and trigger instant Telegram alerts.
+This project integrates Google’s SpeciesNet for wildlife classification with a  weapon detection model (ONNX Runtime) and a real-time MQTT sensor dashboard to monitor remote field cameras, detect threats, and trigger instant Telegram alerts.
 
 ## Features
 * **AI Image & Video Analysis:** Fast, local inference using SpeciesNet to identify wildlife in photos and MP4 videos.
