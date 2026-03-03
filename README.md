@@ -13,7 +13,7 @@ A fully local, AI-powered wildlife monitoring and IoT security system built for 
 
 ## 1. Prerequisites
 Before installing, ensure your Windows machine has the following:
-* **Python 3.9, 3.10, or 3.11:** [Download Python](https://www.python.org/downloads/) (Make sure to check "Add Python to PATH" during installation).
+* **Python 3.10.11:** [Download Python](https://www.python.org/downloads/) (Make sure to check "Add Python to PATH" during installation).
 * **NVIDIA GPU Drivers:** Required for hardware acceleration.
 * **Eclipse Mosquitto:** [Download Mosquitto for Windows](https://mosquitto.org/download/). This is the MQTT broker that allows your ESP32 to talk to the Python server. Install it and ensure the "Mosquitto Broker" service is running in Windows Services.
 
