@@ -1,7 +1,7 @@
 
 # Intelligent Wildlife Monitoring System
 
-A fully local, AI-powered wildlife monitoring and IoT security system built for Windows. This project combines **Google's SpeciesNet**  with a real-time **MQTT sensor dashboard** to monitor remote field cameras .
+This project integrates Google’s SpeciesNet (GPU-accelerated via PyTorch) for wildlife classification with a CPU-based weapon detection model (ONNX Runtime) and a real-time MQTT sensor dashboard to monitor remote field cameras, detect threats, and trigger instant Telegram alerts.
 
 ## Features
 * **AI Image & Video Analysis:** Fast, local inference using SpeciesNet to identify wildlife in photos and MP4 videos.
