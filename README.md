@@ -159,7 +159,6 @@ python app.py
 3. **Wait for Warmup:** The first time you launch, it will take 1-3 minutes to load the PyTorch model into your GPU's VRAM. Wait until you see `🌐 LOCAL URL: http://127.0.0.1:5000` in the console.
 4. Open your web browser and navigate to:
 * **Dashboard:** `http://127.0.0.1:5000/field_unit`
-* **Simple Testing UI:** `http://127.0.0.1:5000/test`
 
 
 
