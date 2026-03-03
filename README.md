@@ -45,23 +45,21 @@ python -m venv venv
 Create a file named `requirements.txt` in the root folder and paste the following:
 
 ```text
-# --- GPU Configuration ---
---extra-index-url [https://download.pytorch.org/whl/cu118](https://download.pytorch.org/whl/cu118)
-torch==2.5.1+cu118
-torchvision==0.20.1+cu118
-
 # --- Web Server & Database ---
 Flask==3.1.2
 flask-cors==6.0.2
 Flask-SQLAlchemy==3.1.1
 Werkzeug==3.1.5
 
-# --- Image & Video Processing ---
+# --- Image Processing ---
 opencv-python==4.11.0.86
 pillow==12.0.0
+numpy==2.2.6
 
 # --- AI Models ---
 speciesnet==5.0.3
+inference==1.0.2
+onnxruntime==1.21.1
 
 # --- IoT & Notifications ---
 paho-mqtt==2.1.0
