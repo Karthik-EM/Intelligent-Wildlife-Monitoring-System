@@ -72,6 +72,10 @@ Install everything by running:
 
 ```powershell
 pip install -r requirements.txt
+```
+NVIDIA GPU (CUDA 11.8)
+```powershell
+pip install torch torchvision torchaudio --index-url https://download.pytorch.org/whl/cu118
 
 ```
 
@@ -100,7 +104,7 @@ Create a hidden environment file to securely store your API keys.
 ```env
 TELEGRAM_BOT_TOKEN=your_bot_token_here
 TELEGRAM_CHAT_ID=your_chat_id_here
-
+ROBOFLOW_API_KEY=your_api_key
 ```
 
 ---
