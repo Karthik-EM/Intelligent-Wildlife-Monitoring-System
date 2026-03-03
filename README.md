@@ -50,7 +50,7 @@ pip install torch torchvision torchaudio --index-url https://download.pytorch.or
 
 ## 3. Install the AI Model (Crucial Step)
 
-The SpeciesNet AI model is a ~200MB file that must be downloaded manually.
+The SpeciesNet AI model is a ~200MB file that must be downloaded.
 
 1. Go to Kaggle: [SpeciesNet v4.0.2a PyTorch Model](https://www.kaggle.com/api/v1/models/google/speciesnet/pyTorch/v4.0.2a/1/download)
 2. Download the `archive.tar.gz` file and extract it.
