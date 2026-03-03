@@ -40,33 +40,7 @@ py -3.10 -m venv venv
 
 *(Note: You must run `.\venv\Scripts\activate` every time you open a new terminal to work on this project).*
 
-### Create `requirements.txt`
-
-Create a file named `requirements.txt` in the root folder and paste the following:
-
-```text
-# --- Web Server & Database ---
-Flask==3.1.2
-flask-cors==6.0.2
-Flask-SQLAlchemy==3.1.1
-Werkzeug==3.1.5
-
-# --- Image Processing ---
-opencv-python==4.11.0.86
-pillow==12.0.0
-numpy==2.2.6
-
-# --- AI Models ---
-speciesnet==5.0.3
-inference==1.0.2
-onnxruntime==1.21.1
-
-# --- IoT & Notifications ---
-paho-mqtt==2.1.0
-python-dotenv==1.2.1
-requests==2.32.5
-
-```
+### Install `requirements.txt and CUDA  11.8`
 
 Install everything by running:
 
