@@ -61,12 +61,12 @@ The SpeciesNet AI model is a ~200MB file that must be downloaded manually.
 
 ---
 
-## 4. Configure Telegram Alerts
+## 4. Environment Variable Setup (.env Configuration)
 
 Create a hidden environment file to securely store your API keys.
 
 1. Create a file named exactly **`.env`** in your main project folder.
-2. Add your Telegram Bot credentials to the file:
+2. Add your credentials to the file:
 
 ```env
 TELEGRAM_BOT_TOKEN=your_bot_token_here
