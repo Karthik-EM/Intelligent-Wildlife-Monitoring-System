@@ -7,7 +7,7 @@ This project integrates Google’s SpeciesNet for wildlife classification with a
 * **AI Image & Video Analysis:** Real-time local inference using  SpeciesNet for wildlife classification and weapon detection for identifying armed threats.
 * **Hybrid GPU–CPU Architecture:** Wildlife classification runs on NVIDIA RTX GPUs via PyTorch (CUDA), while weapon detection operates on the CPU using ONNX Runtime for efficient asymmetric processing.
 * **IoT Sensor Dashboard:** Real-time monitoring of remote field units (Motion, Tilt, Gunshot, and System Status) through an MQTT broker with live device health tracking.
-* **Intelligent Telegram Alerts:** Automated push notifications with species name, confidence score, timestamps, and threat classification , including cooldown logic to prevent alert spam.
+* **Telegram Alerts:** Automated push notifications with species name, confidence score, timestamps, and threat classification , including cooldown logic to prevent alert spam.
 
 ---
 
@@ -16,8 +16,8 @@ Before installing, ensure your Windows machine has the following:
 * **Python 3.10.11:** [Download Python](https://www.python.org/downloads/) (Make sure to check "Add Python to PATH" during installation).
 * **NVIDIA GPU Drivers:** Required for hardware acceleration.
 * **Eclipse Mosquitto:** [Download Mosquitto for Windows](https://mosquitto.org/download/). This is the MQTT broker that allows your ESP32 to talk to the Python server. Install it and ensure the "Mosquitto Broker" service is running in Windows Services.
-
 ---
+*(Note: You must add  "listener 1883 0.0.0.0" "allow_anonymous true" at the end of mosquitto.conf file).*
 
 ## 2. Project Setup
 
