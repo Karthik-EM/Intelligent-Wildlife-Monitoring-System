@@ -94,7 +94,6 @@ WildlifeProject/
 │
 ├── templates/                  # Frontend HTML UI
 │   ├── index.html
-│   ├── simple_test.html
 │   ├── sensor.html
 │   └── amb82_dashboard.html
 │
