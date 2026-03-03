@@ -106,7 +106,7 @@ WildlifeProject/
 ├── temp_inference/
 │   └── frames/                 # Temporary frame extraction folder
 │
-└── venv/                       # Virtual environment (Do not share this folder)
+└── venv/                       # Virtual environment 
 
 ```
 
