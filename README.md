@@ -33,7 +33,7 @@ mkdir templates, static\detections, uploads\videos, temp_inference\frames, speci
 Keep your dependencies isolated by creating a virtual environment:
 
 ```powershell
-python -m venv venv
+py -3.10 -m venv venv
 .\venv\Scripts\activate
 
 ```
