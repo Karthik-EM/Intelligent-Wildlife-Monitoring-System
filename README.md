@@ -5,11 +5,8 @@ This project integrates Google’s SpeciesNet for wildlife classification with a
 
 ## Features
 * **AI Image & Video Analysis:** Real-time local inference using  SpeciesNet for wildlife classification and weapon detection for identifying armed threats.
-
 * **Hybrid GPU–CPU Architecture:** Wildlife classification runs on NVIDIA RTX GPUs via PyTorch (CUDA), while weapon detection operates on the CPU using ONNX Runtime for efficient asymmetric processing.
-
 * **IoT Sensor Dashboard:** Real-time monitoring of remote field units (Motion, Tilt, Gunshot, and System Status) through an MQTT broker with live device health tracking.
-
 * **Intelligent Telegram Alerts:** Automated push notifications with species name, confidence score, timestamps, and threat classification , including cooldown logic to prevent alert spam.
 
 ---
