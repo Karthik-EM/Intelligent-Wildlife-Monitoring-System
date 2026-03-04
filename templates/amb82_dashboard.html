@@ -17,13 +17,12 @@
         }
 
         /* Navigation (Same as others) */
-        .mode-selector {
-            position: fixed; top: 30px; left: 50%; transform: translateX(-50%);
-            z-index: 10000; display: flex; align-items: center; gap: 15px;
-            padding-bottom: 10px; font-family: 'Space Grotesk', sans-serif;
-            font-size: 0.9rem; font-weight: 700; letter-spacing: 0.15em;
-            text-transform: uppercase; mix-blend-mode: multiply;
-        }
+       .mode-selector {
+        position: fixed; top: 30px; left: 50%; transform: translateX(-50%);
+        z-index: 10000; display: flex; align-items: center; gap: 15px;
+        padding-bottom: 10px; font-size: 0.9rem; font-weight: 700; letter-spacing: 0.15em;
+        text-transform: uppercase; mix-blend-mode: multiply; background: rgba(248, 246, 241, 0.9); padding: 10px 20px; border-radius: 50px;
+    }
         .mode-link {
             background: none; border: none; padding: 0; margin: 0; cursor: pointer;
             font-family: inherit; font-size: inherit; font-weight: inherit;
@@ -251,13 +250,15 @@
 </head>
 <body>
 
-    <div class="mode-selector">
-        <a href="{{ url_for('index') }}" class="mode-link">Research</a>
-        <span class="divider">//</span>
-        <a href="{{ url_for('sen') }}" class="mode-link">Sensor Status</a>
-        <span class="divider">//</span>
-        <a href="{{ url_for('amb82_analysis') }}" class="mode-link active">Vedio Analysis</a>
-    </div>
+  <div class="mode-selector">
+    <a href="{{ url_for('index') }}" class="mode-link">Research</a>
+    <span class="divider">//</span>
+    <a href="{{ url_for('sen') }}" class="mode-link">Sensor Status</a>
+    <span class="divider">//</span>
+    <a href="{{ url_for('amb82_analysis') }}" class="mode-link active">Video Analysis</a>
+    <span class="divider">//</span>
+    <a href="{{ url_for('analytics') }}" class="mode-link ">Analytics</a> 
+</div>
 
     <div id="view-field">
         <div class="dashboard-wrapper">
