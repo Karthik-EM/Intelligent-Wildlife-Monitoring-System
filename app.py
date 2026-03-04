@@ -563,6 +563,8 @@ def sen(): return render_template('sensor.html')
 
 @app.route('/field_unit')
 def amb82_analysis(): return render_template('amb82_dashboard.html')
+@app.route('/analytics')
+def analytics(): return render_template('analytics.html')
 
 @app.route('/test')
 def simple_test(): return render_template('simple_test.html')
@@ -787,6 +789,7 @@ def send_command():
         return jsonify({"success": False, "error": "No command provided"}), 400
     except Exception as e:
         return jsonify({"success": False, "error": str(e)}), 500
+
 # ==========================================
 # 6. MAIN SERVER EXECUTION
 # ==========================================
@@ -813,4 +816,4 @@ if __name__ == '__main__':
     print(f"{'='*60}\n")
     
     # 3. Start the Flask web server
-    app.run(host='0.0.0.0', port=5000, debug=False, threaded=False)
+    app.run(host='0.0.0.0', port=5000, debug=True, threaded=False)
