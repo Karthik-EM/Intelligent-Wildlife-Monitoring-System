@@ -1,0 +1,318 @@
+         <!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>SpeciesNet - Advanced Analytics</title>
+    <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;700&display=swap" rel="stylesheet">
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+
+<style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    body { font-family: 'Space Grotesk', sans-serif; background: #f8f6f1; min-height: 100vh; overflow-x: hidden; color: #1a1a1a; }
+
+    /* Navigation */
+    .mode-selector {
+        position: fixed; top: 30px; left: 50%; transform: translateX(-50%);
+        z-index: 10000; display: flex; align-items: center; gap: 15px;
+        padding-bottom: 10px; font-size: 0.9rem; font-weight: 700; letter-spacing: 0.15em;
+        text-transform: uppercase; mix-blend-mode: multiply; background: rgba(248, 246, 241, 0.9); padding: 10px 20px; border-radius: 50px;
+    }
+    .mode-link { background: none; border: none; padding: 0; margin: 0; cursor: pointer; color: #b0b0b0; transition: all 0.4s ease; text-decoration: none; }
+    .mode-link:hover { color: #666; }
+    .mode-link.active { color: #1a1a1a; transform: scale(1.05); }
+    .mode-link.active::after {
+        content: ''; position: absolute; bottom: -6px; left: 50%; transform: translateX(-50%); width: 4px; height: 4px; background: #e53935; border-radius: 50%;
+    }
+    .divider { color: #ddd; font-weight: 400; user-select: none; }
+
+    /* Layout */
+    .scene { min-height: 100vh; display: flex; flex-direction: column; align-items: center; padding: 7rem 2rem 4rem 2rem; }
+    .header-area { width: 100%; max-width: 1200px; margin-bottom: 2rem; }
+    .big-text { font-size: clamp(2rem, 4vw, 2.5rem); font-weight: 700; color: #1a1a1a; }
+    .medium-text { font-size: 1.1rem; color: #666; margin-top: 0.5rem; }
+
+    /* Grid Layout for Dashboard */
+    .dashboard-grid { width: 100%; max-width: 1200px; display: grid; grid-template-columns: repeat(4, 1fr); gap: 1.5rem; }
+    
+    /* Cards */
+    .card { background: white; padding: 1.5rem; border-radius: 16px; box-shadow: 0 4px 20px rgba(0,0,0,0.04); border: 1px solid rgba(0,0,0,0.05); display: flex; flex-direction: column; }
+    
+    /* Stats */
+    .stat-card { text-align: left; justify-content: center; }
+    .stat-title { font-size: 0.9rem; color: #888; text-transform: uppercase; letter-spacing: 1px; font-weight: 700; margin-bottom: 0.5rem; }
+    .stat-value { font-size: 2.2rem; font-weight: 700; color: #1a1a1a; line-height: 1; }
+    .stat-sub { font-size: 0.85rem; color: #aaa; margin-top: 0.5rem; font-weight: 600; }
+    
+    .threat-card { background: #fffcfc; border: 2px solid #ffebeb; }
+    .threat-card .stat-value { color: #e53935; }
+
+    /* Chart Containers */
+    .chart-container { grid-column: span 2; height: 350px; }
+    .card-title { font-size: 1.2rem; font-weight: 700; margin-bottom: 1.5rem; border-bottom: 1px solid #eee; padding-bottom: 0.8rem; display: flex; justify-content: space-between; }
+    .canvas-wrapper { position: relative; flex: 1; min-height: 0; }
+
+    /* Tables */
+    .table-container { grid-column: span 4; overflow-x: auto; }
+    table { width: 100%; border-collapse: collapse; text-align: left; }
+    th { padding: 1rem; background: #f8f9fa; color: #666; font-size: 0.85rem; text-transform: uppercase; letter-spacing: 1px; border-bottom: 2px solid #eee; }
+    td { padding: 1rem; border-bottom: 1px solid #eee; color: #1a1a1a; font-weight: 600; }
+    tr:last-child td { border-bottom: none; }
+    .conf-badge { background: #e0f2f1; color: #00897b; padding: 4px 10px; border-radius: 50px; font-size: 0.85rem; }
+    
+    .threat-row td { background: #fff5f5; color: #e53935; }
+    .threat-row .conf-badge { background: #ffebee; color: #e53935; }
+
+    @media (max-width: 1024px) {
+        .dashboard-grid { grid-template-columns: repeat(2, 1fr); }
+        .chart-container, .table-container { grid-column: span 2; }
+    }
+    @media (max-width: 600px) {
+        .dashboard-grid { grid-template-columns: 1fr; }
+        .chart-container, .table-container, .stat-card { grid-column: span 1; }
+    }
+</style>
+</head>
+<body>
+
+<div class="mode-selector">
+    <a href="{{ url_for('index') }}" class="mode-link">Research</a>
+    <span class="divider">//</span>
+    <a href="{{ url_for('sen') }}" class="mode-link">Sensor Status</a>
+    <span class="divider">//</span>
+    <a href="{{ url_for('amb82_analysis') }}" class="mode-link">Video Analysis</a>
+    <span class="divider">//</span>
+    <a href="{{ url_for('analytics') }}" class="mode-link active">Analytics</a> 
+</div>
+
+<div class="scene">
+    <div class="header-area">
+        <h1 class="big-text">Command Center</h1>
+        <p class="medium-text">Actionable intelligence from all connected camera nodes.</p>
+    </div>
+
+    <div class="dashboard-grid">
+        
+        <div class="card stat-card">
+            <span class="stat-title">Total Traffic</span>
+            <span class="stat-value" id="val-total">0</span>
+            <span class="stat-sub">Detected entities in database</span>
+        </div>
+        <div class="card stat-card threat-card">
+            <span class="stat-title" style="color: #e53935;">Critical Alerts</span>
+            <span class="stat-value" id="val-threats">0</span>
+            <span class="stat-sub" style="color: #ef9a9a;">Armed humans recorded</span>
+        </div>
+        <div class="card stat-card">
+            <span class="stat-title">Alpha Species</span>
+            <span class="stat-value" id="val-top-species" style="font-size: 1.8rem;">-</span>
+            <span class="stat-sub">Most frequently detected</span>
+        </div>
+        <div class="card stat-card">
+            <span class="stat-title">Peak Activity</span>
+            <span class="stat-value" id="val-peak-time">-</span>
+            <span class="stat-sub">Highest traffic hour</span>
+        </div>
+
+        <div class="card chart-container">
+            <div class="card-title">Activity Heatmap </div>
+            <div class="canvas-wrapper">
+                <canvas id="timeChart"></canvas>
+            </div>
+        </div>
+
+        <div class="card chart-container">
+            <div class="card-title">Top 5 Species Detected </div>
+            <div class="canvas-wrapper">
+                <canvas id="topSpeciesChart"></canvas>
+            </div>
+        </div>
+
+        <div class="card table-container">
+            <div class="card-title" style="border: none; margin-bottom: 0;">Recent Database Logs </div>
+            <table>
+                <thead>
+                    <tr>
+                        <th>Timestamp</th>
+                        <th>Classification</th>
+                        <th>AI Confidence</th>
+                        <th>Source File</th>
+                    </tr>
+                </thead>
+                <tbody id="log-table-body">
+                    <tr><td colspan="4" style="text-align:center; color:#888;">Loading database...</td></tr>
+                </tbody>
+            </table>
+        </div>
+
+    </div>
+</div>
+
+<script>
+    let timeChart, topSpeciesChart;
+
+    function formatAMPM(hours) {
+        const ampm = hours >= 12 ? 'PM' : 'AM';
+        hours = hours % 12;
+        hours = hours ? hours : 12; 
+        return hours + ' ' + ampm;
+    }
+
+    async function fetchAndProcessData() {
+        try {
+            const response = await fetch('/api/history');
+            const historyData = await response.json();
+
+            let totalDetections = 0;
+            let armedThreats = 0;
+            const speciesCounts = {};
+            const hourCounts = Array(24).fill(0);
+            let allLogs = [];
+// 1. Process all the raw data (WITH DEDUPLICATION)
+            historyData.forEach(video => {
+                const videoDate = new Date(video.time);
+                const hourOfDay = videoDate.getHours();
+
+                // 🚀 NEW: Create a temporary dictionary for THIS specific video
+                const uniqueSpeciesInVideo = {};
+
+                // Go through all detections in this video and only keep the best one of each species
+                video.detections.forEach(det => {
+                    // If we haven't seen this species in this video yet, OR if this new frame has a higher confidence
+                    if (!uniqueSpeciesInVideo[det.species] || det.confidence > uniqueSpeciesInVideo[det.species].confidence) {
+                        uniqueSpeciesInVideo[det.species] = det;
+                    }
+                });
+
+                // Now, only log the unique, filtered results to our Analytics!
+                Object.values(uniqueSpeciesInVideo).forEach(bestDet => {
+                    totalDetections++;
+                    speciesCounts[bestDet.species] = (speciesCounts[bestDet.species] || 0) + 1;
+                    hourCounts[hourOfDay]++;
+
+                    if (bestDet.species === "ARMED HUMAN") armedThreats++;
+
+                    // Save flat log for the table
+                    allLogs.push({
+                        time: videoDate,
+                        species: bestDet.species,
+                        confidence: bestDet.confidence,
+                        file: video.filename
+                    });
+                });
+            });
+
+            // Sort logs from newest to oldest
+            allLogs.sort((a, b) => b.time - a.time);
+
+            // 2. Calculate "Actionable" Metrics
+            // Find Peak Hour
+            let peakHourValue = 0;
+            let peakHourIndex = 0;
+            hourCounts.forEach((count, idx) => {
+                if (count > peakHourValue) { peakHourValue = count; peakHourIndex = idx; }
+            });
+            const peakHourString = peakHourValue > 0 ? formatAMPM(peakHourIndex) : "No Data";
+
+            // Find Top Species (Excluding Armed Humans from the 'Alpha Animal' stat)
+            let sortedSpecies = Object.entries(speciesCounts)
+                .filter(s => s[0] !== "ARMED HUMAN") 
+                .sort((a, b) => b[1] - a[1]);
+            
+            const topSpeciesStr = sortedSpecies.length > 0 ? sortedSpecies[0][0] : "None";
+
+            // 3. Update the UI Text Cards
+            document.getElementById('val-total').innerText = totalDetections;
+            document.getElementById('val-threats').innerText = armedThreats;
+            document.getElementById('val-top-species').innerText = topSpeciesStr;
+            document.getElementById('val-peak-time').innerText = peakHourString;
+
+            // 4. Populate the Data Table (Show top 15 recent)
+            const tbody = document.getElementById('log-table-body');
+            tbody.innerHTML = '';
+            if (allLogs.length === 0) {
+                tbody.innerHTML = '<tr><td colspan="4" style="text-align:center; color:#888;">No detections recorded yet.</td></tr>';
+            } else {
+                allLogs.slice(0, 15).forEach(log => {
+                    const isThreat = log.species === "ARMED HUMAN";
+                    const rowClass = isThreat ? "threat-row" : "";
+                    const dateStr = log.time.toLocaleString();
+                    const confStr = Math.round(log.confidence * 100) + '%';
+                    
+                    tbody.innerHTML += `
+                        <tr class="${rowClass}">
+                            <td>${dateStr}</td>
+                            <td>${isThreat ? '⚠️ ' : ''}${log.species}</td>
+                            <td><span class="conf-badge">${confStr}</span></td>
+                            <td style="font-size: 0.85rem; color:#888;">${log.file}</td>
+                        </tr>
+                    `;
+                });
+            }
+
+            // 5. Draw Time Activity Chart
+            const timeCtx = document.getElementById('timeChart').getContext('2d');
+            if(timeChart) timeChart.destroy();
+
+            const timeLabels = ['12am', '1am', '2am', '3am', '4am', '5am', '6am', '7am', '8am', '9am', '10am', '11am', '12pm', '1pm', '2pm', '3pm', '4pm', '5pm', '6pm', '7pm', '8pm', '9pm', '10pm', '11pm'];
+
+            timeChart = new Chart(timeCtx, {
+                type: 'line',
+                data: {
+                    labels: timeLabels,
+                    datasets: [{
+                        label: 'Detections',
+                        data: hourCounts,
+                        borderColor: '#1a1a1a',
+                        backgroundColor: 'rgba(26, 26, 26, 0.1)',
+                        borderWidth: 3,
+                        pointBackgroundColor: '#1a1a1a',
+                        fill: true,
+                        tension: 0.4 // Smooth curves
+                    }]
+                },
+                options: {
+                    responsive: true, maintainAspectRatio: false,
+                    scales: { y: { beginAtZero: true, ticks: { stepSize: 1 } }, x: { grid: { display: false } } },
+                    plugins: { legend: { display: false } }
+                }
+            });
+
+            // 6. Draw Top 5 Species Horizontal Bar Chart
+            const top5Species = sortedSpecies.slice(0, 5);
+            const speciesLabels = top5Species.map(s => s[0]);
+            const speciesValues = top5Species.map(s => s[1]);
+
+            const topCtx = document.getElementById('topSpeciesChart').getContext('2d');
+            if(topSpeciesChart) topSpeciesChart.destroy();
+
+            topSpeciesChart = new Chart(topCtx, {
+                type: 'bar',
+                data: {
+                    labels: speciesLabels,
+                    datasets: [{
+                        data: speciesValues,
+                        backgroundColor: ['#1e88e5', '#43a047', '#fb8c00', '#8e24aa', '#e53935'],
+                        borderRadius: 4
+                    }]
+                },
+                options: {
+                    indexAxis: 'y', // Makes it horizontal!
+                    responsive: true, maintainAspectRatio: false,
+                    scales: { x: { beginAtZero: true, ticks: { stepSize: 1 } }, y: { grid: { display: false } } },
+                    plugins: { legend: { display: false } }
+                }
+            });
+
+        } catch (error) {
+            console.error("Error loading analytics data:", error);
+            document.getElementById('log-table-body').innerHTML = '<tr><td colspan="4" style="color:red;">Failed to connect to database.</td></tr>';
+        }
+    }
+
+    // Run on load
+    window.onload = fetchAndProcessData;
+</script>
+
+</body>
+</html>
