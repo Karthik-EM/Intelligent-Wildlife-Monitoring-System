@@ -217,20 +217,21 @@ void connectToWiFi() {
     Serial.println("\nWiFi Connected!");
 }
 
-void uploadVideo() {
-    if (WiFi.status() != WL_CONNECTED) return;
+bool uploadVideo(String targetFile) {
+    if (WiFi.status() != WL_CONNECTED) return false;
 
-    File file = fs.open(FILENAME);
+    File file = fs.open(targetFile);
     if (!file) {
         Serial.println("ERROR: File does not exist!");
-        return;
+        return true; 
     }
 
     uint32_t fileSize = file.size();
     if (fileSize < 1000) {
         Serial.println("ERROR: File too small.");
         file.close();
-        return;
+        fs.remove(targetFile); 
+        return true;
     }
     file.close();
 
@@ -241,19 +242,18 @@ void uploadVideo() {
 
     client.setTimeout(20000);
     
-    // Connect via Standard HTTP
     if (client.connect(host_buf, server_port)) {
         Serial.println("Connected to Server!");
     } else {
         Serial.println("Connection failed! Check IP and Port.");
-        return;
+        return false; 
     }
 
-    file = fs.open(FILENAME);
+    file = fs.open(targetFile);
     
     String boundary = "---AmebaBoundary";
     String head = "--" + boundary + "\r\nContent-Disposition: form-data; name=\"source\"\r\n\r\namb82\r\n";
-    head += "--" + boundary + "\r\nContent-Disposition: form-data; name=\"video\"; filename=\"" + FILENAME + "\"\r\nContent-Type: video/mp4\r\n\r\n";
+    head += "--" + boundary + "\r\nContent-Disposition: form-data; name=\"video\"; filename=\"" + targetFile + "\"\r\nContent-Type: video/mp4\r\n\r\n";
     String tail = "\r\n--" + boundary + "--\r\n";
     
     uint32_t totalLen = head.length() + fileSize + tail.length();
@@ -267,51 +267,67 @@ void uploadVideo() {
 
     client.print(head);
 
-    uint8_t buf[1024];
+    uint8_t buf[4096];
     size_t bytesSent = 0;
     Serial.println("Uploading...");
 
-    // Blink Logic Variables
-    unsigned long previousMillis = 0;
-    const long blinkInterval = 200; 
-    bool ledState = LOW;
-
+    // CHANGED: Removed internal blink logic to maximize speed
     while (file.available()) {
+        // Highly recommended failsafe: abort if server drops connection
+        if (!client.connected()) {
+            Serial.println("\n❌ ERROR: Connection lost mid-upload!");
+            file.close();
+            client.stop();
+            return false;
+        }
+
         size_t len = file.read(buf, sizeof(buf));
         client.write(buf, len);
         bytesSent += len;
         
         if (bytesSent % 102400 == 0) Serial.print("."); 
 
-        // Non-blocking Blink Logic
-        unsigned long currentMillis = millis();
-        if (currentMillis - previousMillis >= blinkInterval) {
-            previousMillis = currentMillis;
-            ledState = !ledState;
-            digitalWrite(LED_RECORDING, ledState);
-        }
-
-        // --- THE FIX: Let the Wi-Fi driver catch its breath ---
-        delay(2); 
-        // ------------------------------------------------------
+        yield();
     }
     file.close();
     Serial.println("\nFile Sent.");
+    
     client.print(tail);
     client.flush();
-    
-    // Ensure LED turns off after upload
+    Serial.println("Waiting 2 seconds for transmission to finish...");
+    delay(2000);
     digitalWrite(LED_RECORDING, LOW);
     
     client.stop();
     Serial.println("Upload Complete.");
+    
+    return true; 
 }
+
+String getNextFileName() {
+    int counter = 1;
+    if (fs.exists("vid_counter.txt")) {
+        File file = fs.open("vid_counter.txt");
+        if (file) {
+            counter = file.readString().toInt();
+            file.close();
+        }
+    }
+    
+    File fileOut = fs.open("vid_counter.txt");
+    if (fileOut) {
+        fileOut.print(counter + 1);
+        fileOut.close();
+    }
+    
+    return "Vid_" + String(counter);
+}
+
 // ================= MAIN SETUP =================
 
 void setup() {
     Serial.begin(115200);
     
-    // 1. Initialize Deep Sleep Configuration
     PowerMode.begin(DEEPSLEEP_MODE, WAKEUP_SOURCE, RETENTION, WAKEUP_PIN);
     
     pinMode(LED_RECORDING, OUTPUT);
@@ -332,6 +348,9 @@ void setup() {
     Serial.println("--- Starting Recording Sequence ---");
     digitalWrite(LED_RECORDING, HIGH);
 
+    String baseName = getNextFileName(); 
+    String mp4FileName = baseName + ".mp4";
+
     Camera.configVideoChannel(CHANNEL, configV);
     Camera.videoInit();
     audio.configAudio(configA);
@@ -343,7 +362,8 @@ void setup() {
     mp4.configAudio(configA, CODEC_AAC);
     mp4.setRecordingDuration(RECORDING_DURATION);
     mp4.setRecordingFileCount(1);
-    mp4.setRecordingFileName("TestRecordingAV");
+    
+    mp4.setRecordingFileName(baseName.c_str()); 
     
     audioStreamer.registerInput(audio);
     audioStreamer.registerOutput(aac);
@@ -355,7 +375,7 @@ void setup() {
     avMixStreamer.begin();
 
     Camera.channelBegin(CHANNEL);
-    Serial.println("Recording...");
+    Serial.println("Recording to: " + mp4FileName);
     mp4.begin();
     
     delay((RECORDING_DURATION + 5) * 1000);
@@ -363,13 +383,31 @@ void setup() {
     stopAllStreaming(); 
 
     connectToWiFi(); 
-    uploadVideo();
 
+    if (uploadVideo(mp4FileName)) {
+        Serial.println("Main upload success! Deleting file.");
+        fs.remove(mp4FileName); 
+    } else {
+        Serial.println("Main upload failed! File saved for next boot.");
+    }
+
+
+    // Shut down Wi-Fi to prevent leakage current
+    WiFi.disconnect();
+    
+    // CHANGED: Flash the Green LED 5 times rapidly to confirm it finished the process
+    Serial.println("Signaling completion...");
+    for(int i = 0; i < 5; i++) {
+        digitalWrite(LED_RECORDING, HIGH);
+        delay(100);
+        digitalWrite(LED_RECORDING, LOW);
+        delay(100);
+    }
+    
     // ================= ENTER DEEP SLEEP =================
     Serial.println("Task complete. Entering Deep Sleep. Wake up via Pin 21 High.");
-    delay(1000); 
+    delay(500); // Give serial monitor time to print the final message
     PowerMode.start(); 
-    // ====================================================
 }
 
 void loop() {
