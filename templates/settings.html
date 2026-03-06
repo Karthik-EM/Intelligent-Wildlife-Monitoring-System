@@ -1,0 +1,345 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>SentryNet - System Settings</title>
+    <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;700&display=swap" rel="stylesheet">
+    
+    <style>
+        /* ========== GLOBAL & NAVIGATION ========== */
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body { 
+            font-family: 'Space Grotesk', sans-serif; 
+            background: #f8f6f1; 
+            min-height: 100vh; 
+            overflow-x: hidden; 
+            color: #1a1a1a;
+        }
+
+        .mode-selector {
+            position: fixed; top: 30px; left: 50%; transform: translateX(-50%);
+            z-index: 10000; display: flex; align-items: center; gap: 15px;
+            padding-bottom: 10px; font-size: 0.9rem; font-weight: 700; letter-spacing: 0.15em;
+            text-transform: uppercase; mix-blend-mode: multiply; background: rgba(248, 246, 241, 0.9); padding: 10px 20px; border-radius: 50px;
+        }
+        .mode-link {
+            background: none; border: none; padding: 0; margin: 0; cursor: pointer;
+            font-family: inherit; font-size: inherit; font-weight: inherit;
+            letter-spacing: inherit; text-transform: inherit; outline: none;
+            color: #b0b0b0; transition: all 0.4s ease; text-decoration: none;
+        }
+        .mode-link:hover { color: #666; }
+        .mode-link.active { color: #1a1a1a; transform: scale(1.05); position: relative; }
+        .mode-link.active::after {
+            content: ''; position: absolute; bottom: -6px; left: 50%;
+            transform: translateX(-50%); width: 4px; height: 4px;
+            background: #e53935; border-radius: 50%;
+        }
+        .divider { color: #ddd; font-weight: 400; user-select: none; }
+
+        /* ========== FLAT SETTINGS LAYOUT ========== */
+        #view-settings {
+            padding: 120px 5vw 5vh 5vw;
+            display: flex;
+            justify-content: center;
+            opacity: 0;
+            animation: fadeIn 0.8s ease-out forwards;
+        }
+
+        .dashboard-wrapper {
+            width: 100%;
+            max-width: 1400px; /* Streamlined width for list view */
+            display: flex;
+            flex-direction: column;
+        }
+
+        @keyframes fadeIn { to { opacity: 1; } }
+
+        /* Header Area (Flat) */
+        .page-header { 
+            display: flex; justify-content: space-between; align-items: flex-end; 
+            padding-bottom: 2rem; border-bottom: 2px solid #1a1a1a;
+            margin-bottom: 2rem;
+        }
+        .brand h1 { font-size: 2rem; font-weight: 700; letter-spacing: -0.02em; line-height: 1; }
+        .brand p { font-size: 0.85rem; color: #666; text-transform: uppercase; letter-spacing: 0.1em; margin-top: 8px; }
+        
+        .action-group {
+            display: flex; gap: 12px;
+        }
+
+        /* List Sections */
+        .settings-section {
+            margin-bottom: 3rem;
+        }
+        .section-title {
+            font-size: 0.85rem; font-weight: 700; color: #e53935; 
+            text-transform: uppercase; letter-spacing: 0.1em; margin-bottom: 1rem;
+        }
+
+        /* Setting Rows */
+        .setting-row {
+            display: grid;
+            grid-template-columns: 1fr 1.5fr;
+            align-items: center;
+            padding: 1.5rem 0;
+            border-bottom: 1px solid #ddd;
+            gap: 2rem;
+        }
+        .setting-row:last-child {
+            border-bottom: none;
+        }
+        
+        .setting-info { display: flex; flex-direction: column; gap: 4px; }
+        .setting-name { font-size: 1.1rem; font-weight: 700; }
+        .setting-desc { font-size: 0.85rem; color: #666; line-height: 1.4; }
+        
+        .setting-control {
+            display: flex; align-items: center; gap: 1rem;
+        }
+        .setting-value {
+            font-size: 1.2rem; font-weight: 700; color: #1a1a1a; 
+            min-width: 60px; text-align: right; font-variant-numeric: tabular-nums;
+        }
+
+        /* Custom Sliders */
+        input[type=range] {
+            -webkit-appearance: none; width: 100%; background: transparent; flex: 1;
+        }
+        input[type=range]::-webkit-slider-thumb {
+            -webkit-appearance: none; height: 20px; width: 20px;
+            border-radius: 50%; background: #1a1a1a; cursor: pointer;
+            margin-top: -8px; box-shadow: 0 2px 5px rgba(0,0,0,0.2);
+            transition: transform 0.1s;
+        }
+        input[type=range]::-webkit-slider-thumb:hover { transform: scale(1.2); }
+        input[type=range]::-webkit-slider-runnable-track {
+            width: 100%; height: 4px; cursor: pointer;
+            background: #ccc; border-radius: 50px;
+        }
+        input[type=range]:focus { outline: none; }
+        
+        /* Buttons */
+        .btn {
+            padding: 10px 24px; border-radius: 50px;
+            font-family: inherit; font-weight: 700; font-size: 0.9rem;
+            cursor: pointer; transition: all 0.2s ease;
+            display: flex; align-items: center; gap: 8px; outline: none;
+        }
+        .btn-primary {
+            background: #1a1a1a; color: #fff; border: 2px solid #1a1a1a;
+            box-shadow: 0 4px 10px rgba(0,0,0,0.1);
+        }
+        .btn-primary:hover { background: #333; transform: translateY(-2px); box-shadow: 0 6px 15px rgba(0,0,0,0.15); }
+        .btn-primary:active { transform: translateY(2px) scale(0.95); background: #000; }
+        .btn-primary.saving { background: #666; border-color: #666; pointer-events: none; } 
+        .btn-primary.success { background: #43a047; border-color: #43a047; } 
+
+        .btn-secondary {
+            background: transparent; color: #1a1a1a; border: 2px solid #ccc;
+        }
+        .btn-secondary:hover { border-color: #1a1a1a; background: rgba(0,0,0,0.05); }
+
+        /* Responsive */
+        @media (max-width: 768px) {
+            .setting-row { grid-template-columns: 1fr; gap: 1rem; }
+            .action-group { flex-direction: column; }
+            .page-header { flex-direction: column; align-items: flex-start; gap: 1.5rem; }
+        }
+    </style>
+</head>
+
+<body>
+    
+<div class="mode-selector">
+    <a href="{{ url_for('index') }}" class="mode-link">Research</a>
+    <span class="divider">//</span>
+    <a href="{{ url_for('sen') }}" class="mode-link">Sensor Status</a>
+    <span class="divider">//</span>
+    <a href="{{ url_for('amb82_analysis') }}" class="mode-link">Video Analysis</a>
+    <span class="divider">//</span>
+    <a href="{{ url_for('analytics') }}" class="mode-link">Analytics</a> 
+    <span class="divider">//</span>
+    <a href="{{ url_for('settings') }}" class="mode-link active">Settings</a> 
+</div>
+
+<div id="view-settings">
+    <div class="dashboard-wrapper">
+        
+        <div class="page-header">
+            <div class="brand">
+                <h1>Configuration</h1>
+                <p>System Parameters & AI Thresholds</p>
+            </div>
+            
+            <div class="action-group">
+                <button class="btn btn-secondary" onclick="resetDefaults()">
+                    <span>↺</span> Reset Defaults
+                </button>
+                <button id="saveBtn" class="btn btn-primary" onclick="saveSettings()">
+                    <span>💾</span> Save Changes
+                </button>
+            </div>
+        </div>
+
+        <div class="settings-section">
+            <div class="section-title">AI Vision Models</div>
+            
+            <div class="setting-row">
+                <div class="setting-info">
+                    <div class="setting-name">Weapon Confidence Threshold</div>
+                    <div class="setting-desc">Minimum certainty required to trigger a lethal threat alert.</div>
+                </div>
+                <div class="setting-control">
+                    <input type="range" id="input-weapon" min="10" max="95" step="1" value="30" 
+                           oninput="updateDisplay('input-weapon', 'val-weapon', '%')">
+                    <div class="setting-value" id="val-weapon">30%</div>
+                </div>
+            </div>
+
+            <div class="setting-row">
+                <div class="setting-info">
+                    <div class="setting-name">Wildlife Smart Filter</div>
+                    <div class="setting-desc">Minimum certainty to record animals in the database.</div>
+                </div>
+                <div class="setting-control">
+                    <input type="range" id="input-wildlife" min="10" max="95" step="1" value="55" 
+                           oninput="updateDisplay('input-wildlife', 'val-wildlife', '%')">
+                    <div class="setting-value" id="val-wildlife">55%</div>
+                </div>
+            </div>
+        </div>
+
+        <div class="settings-section">
+            <div class="section-title" style="color: #43a047;">Timing & Hardware</div>
+            
+            <div class="setting-row">
+                <div class="setting-info">
+                    <div class="setting-name">Sensor Cooldown</div>
+                    <div class="setting-desc">Seconds to wait before repeating ESP32 hardware alerts.</div>
+                </div>
+                <div class="setting-control">
+                    <input type="range" id="input-cooldown" min="1" max="60" step="1" value="5" 
+                           oninput="updateDisplay('input-cooldown', 'val-cooldown', 's')">
+                    <div class="setting-value" id="val-cooldown">5s</div>
+                </div>
+            </div>
+
+            <div class="setting-row">
+                <div class="setting-info">
+                    <div class="setting-name">Species Spam Filter</div>
+                    <div class="setting-desc">Seconds to ignore the exact same animal in video analysis.</div>
+                </div>
+                <div class="setting-control">
+                    <input type="range" id="input-spam" min="1" max="30" step="1" value="5" 
+                           oninput="updateDisplay('input-spam', 'val-spam', 's')">
+                    <div class="setting-value" id="val-spam">5s</div>
+                </div>
+            </div>
+        </div>
+
+    </div>
+</div>
+
+<script>
+    // --- Define Defaults ---
+    const DEFAULTS = {
+        weapon: 30,
+        wildlife: 55,
+        cooldown: 5,
+        spam: 5
+    };
+
+    // --- Update Number Display when Sliding ---
+    function updateDisplay(inputId, displayId, suffix) {
+        const val = document.getElementById(inputId).value;
+        document.getElementById(displayId).textContent = val + suffix;
+    }
+
+    // --- Load Current Settings from Python ---
+    async function loadSettings() {
+        try {
+            const res = await fetch('/api/settings');
+            const data = await res.json();
+            
+            if (data.success && data.settings) {
+                document.getElementById('input-weapon').value = Math.round(data.settings.weapon_confidence_threshold * 100);
+                document.getElementById('input-wildlife').value = Math.round(data.settings.species_confidence_threshold * 100);
+                document.getElementById('input-cooldown').value = data.settings.sensor_cooldown;
+                document.getElementById('input-spam').value = data.settings.time_gap_threshold;
+
+                refreshAllDisplays();
+            }
+        } catch (e) {
+            console.error("Could not load settings:", e);
+        }
+    }
+
+    // --- Reset Settings to Defaults ---
+    function resetDefaults() {
+        if(confirm("Are you sure you want to reset all settings to their original values?")) {
+            document.getElementById('input-weapon').value = DEFAULTS.weapon;
+            document.getElementById('input-wildlife').value = DEFAULTS.wildlife;
+            document.getElementById('input-cooldown').value = DEFAULTS.cooldown;
+            document.getElementById('input-spam').value = DEFAULTS.spam;
+
+            refreshAllDisplays();
+            saveSettings(); // Automatically save the defaults to backend
+        }
+    }
+
+    function refreshAllDisplays() {
+        updateDisplay('input-weapon', 'val-weapon', '%');
+        updateDisplay('input-wildlife', 'val-wildlife', '%');
+        updateDisplay('input-cooldown', 'val-cooldown', 's');
+        updateDisplay('input-spam', 'val-spam', 's');
+    }
+
+    // --- Save Settings back to Python ---
+    async function saveSettings() {
+        const btn = document.getElementById('saveBtn');
+        const originalHTML = '<span>💾</span> Save Changes';
+        
+        try {
+            btn.classList.add('saving');
+            btn.innerHTML = '<span>⏳</span> Saving...';
+
+            const payload = {
+                weapon_confidence_threshold: parseInt(document.getElementById('input-weapon').value) / 100.0,
+                species_confidence_threshold: parseInt(document.getElementById('input-wildlife').value) / 100.0,
+                sensor_cooldown: parseInt(document.getElementById('input-cooldown').value),
+                time_gap_threshold: parseInt(document.getElementById('input-spam').value)
+            };
+
+            const res = await fetch('/api/settings', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(payload)
+            });
+            
+            const data = await res.json();
+            if (!data.success) throw new Error(data.error);
+
+            btn.classList.remove('saving');
+            btn.classList.add('success');
+            btn.innerHTML = '<span>✅</span> Saved!';
+
+        } catch (e) {
+            console.error(e);
+            btn.classList.remove('saving');
+            btn.innerHTML = '<span>❌</span> Error';
+        }
+
+        setTimeout(() => {
+            btn.classList.remove('saving', 'success');
+            btn.innerHTML = originalHTML;
+        }, 2000);
+    }
+
+    // Initialize on page load
+    window.addEventListener('DOMContentLoaded', loadSettings);
+</script>
+
+</body>
+</html>
