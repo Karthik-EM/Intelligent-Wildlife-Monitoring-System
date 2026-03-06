@@ -250,14 +250,16 @@
 </head>
 <body>
 
-  <div class="mode-selector">
+<div class="mode-selector">
     <a href="{{ url_for('index') }}" class="mode-link">Research</a>
     <span class="divider">//</span>
     <a href="{{ url_for('sen') }}" class="mode-link">Sensor Status</a>
     <span class="divider">//</span>
     <a href="{{ url_for('amb82_analysis') }}" class="mode-link active">Video Analysis</a>
     <span class="divider">//</span>
-    <a href="{{ url_for('analytics') }}" class="mode-link ">Analytics</a> 
+    <a href="{{ url_for('analytics') }}" class="mode-link">Analytics</a> 
+    <span class="divider">//</span>
+    <a href="{{ url_for('settings') }}" class="mode-link ">Settings</a> 
 </div>
 
     <div id="view-field">
