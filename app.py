@@ -39,11 +39,16 @@ TELEGRAM_BOT_TOKEN = os.getenv('TELEGRAM_BOT_TOKEN')
 TELEGRAM_CHAT_ID = os.getenv('TELEGRAM_CHAT_ID')
 ROBOFLOW_API_KEY = os.getenv('ROBOFLOW_API_KEY')
 
-# --- Trackers to prevent notification spam ---
+# --- Dynamic Application Settings (Defaults) ---
+APP_CONFIG = {
+    "sensor_cooldown": 5,                # Wait 5 seconds before repeating sensor alerts
+    "weapon_confidence_threshold": 0.30, # Minimum confidence for weapon detection
+    "species_confidence_threshold": 0.55, # Minimum confidence for wildlife in video smart filter
+    "time_gap_threshold": 5              # Spam prevention gap per species in video processing
+}
+
+# Trackers to prevent notification spam
 sensor_alert_history = {"motion": 0, "tilt": 0, "gunshot": 0}
-SENSOR_COOLDOWN = 5  # Wait 5 seconds before repeating sensor alerts
-# confidence
-WEAPON_CONFIDENCE_THRESHOLD = 0.30
 # --- Define Folder Paths ---
 BASE_DIR = os.getcwd()
 MODEL_FOLDER = os.path.join(BASE_DIR, "speciesnet_model")
@@ -341,7 +346,7 @@ class BatchVideoProcessor:
                                 print(f"👤 Human spotted at {time_sec:.1f}s. Running Weapon Scan on CPU...")
                                 
                                 # Run inference on the Intel i5 CPU
-                                weapon_res = self.model_manager.weapon_model.infer(img,confidence=WEAPON_CONFIDENCE_THRESHOLD)
+                                weapon_res = self.model_manager.weapon_model.infer(img,confidence=APP_CONFIG["weapon_confidence_threshold"])
                                 
                                 # If weapon found...
                                 if len(weapon_res[0].predictions) > 0:
@@ -454,7 +459,7 @@ def on_mqtt_message(client, userdata, msg):
             
             # 1. MOTION
             if data.get('motion') == 1:
-                if (current_time - sensor_alert_history['motion']) > SENSOR_COOLDOWN:
+                if (current_time - sensor_alert_history['motion']) > APP_CONFIG["sensor_cooldown"]:
                     msg_text = f"🏃 *MOTION DETECTED* 🏃\n\n⏱️ *Time:* {datetime.now().strftime('%H:%M:%S')}\n📍 *Unit:* Field Cam 01"
                     Thread(target=send_telegram_alert, args=(msg_text,)).start()
                     log_event_to_db("motion") # Save to DB
@@ -463,7 +468,7 @@ def on_mqtt_message(client, userdata, msg):
             # 2. TILT
             tilt_val = data.get('tilt', 0.0)
             if tilt_val > 30: # If camera falls off tree
-                if (current_time - sensor_alert_history['tilt']) > SENSOR_COOLDOWN:
+                if (current_time - sensor_alert_history['tilt']) > APP_CONFIG["sensor_cooldown"]:
                     msg_text = f"⚠️ *DEVICE TILT WARNING* ⚠️\n\n📉 *Angle:* {tilt_val}°\n📍 *Unit:* Field Cam 01\nCheck mounting immediately."
                     Thread(target=send_telegram_alert, args=(msg_text,)).start()
                     log_event_to_db("tilt", tilt_val) # Save to DB with angle
@@ -511,9 +516,9 @@ def handle_amb82_video(video_file, sample_fps=1, min_conf=0.5, country='IND', ro
         # ==========================================
         # 🚀 THE "SMART FILTER" PIPELINE
         # ==========================================
-        CONFIDENCE_THRESHOLD = 0.55
-        TIME_GAP_THRESHOLD = 5
-
+        CONFIDENCE_THRESHOLD = APP_CONFIG["species_confidence_threshold"]
+        TIME_GAP_THRESHOLD = APP_CONFIG["time_gap_threshold"]
+        
         clean_detections = []
         last_seen_dict = {}
 
@@ -568,6 +573,8 @@ def analytics(): return render_template('analytics.html')
 
 @app.route('/test')
 def simple_test(): return render_template('simple_test.html')
+@app.route('/settings')
+def settings(): return render_template('settings.html')
 
 @app.route('/api/detect', methods=['POST'])
 def detect():
@@ -645,7 +652,7 @@ def detect():
                     
                     try:
                         # Run Weapon Model on Intel i5
-                        weapon_res = model_manager.weapon_model.infer(img,confidence=WEAPON_CONFIDENCE_THRESHOLD)
+                        weapon_res = model_manager.weapon_model.infer(img,confidence=APP_CONFIG["weapon_confidence_threshold"])
                         
                         # Debug Print 2: See how many weapons the CPU found
                         print(f"🎯 Weapon scan complete. Found {len(weapon_res[0].predictions)} threats.")
@@ -789,7 +796,33 @@ def send_command():
         return jsonify({"success": False, "error": "No command provided"}), 400
     except Exception as e:
         return jsonify({"success": False, "error": str(e)}), 500
+    #setting cahnge from ui
+@app.route('/api/settings', methods=['GET'])
+def get_settings():
+    """Returns the current dynamic settings to the frontend."""
+    return jsonify({"success": True, "settings": APP_CONFIG})
 
+@app.route('/api/settings', methods=['POST'])
+def update_settings():
+    """Allows the frontend to update the dynamic settings."""
+    try:
+        data = request.json
+        if not data:
+            return jsonify({"success": False, "error": "No data provided"}), 400
+
+        # Loop through incoming data and update the config if the key exists
+        for key, value in data.items():
+            if key in APP_CONFIG:
+                # Ensure we maintain the correct data type (float vs int)
+                if isinstance(APP_CONFIG[key], float):
+                    APP_CONFIG[key] = float(value)
+                elif isinstance(APP_CONFIG[key], int):
+                    APP_CONFIG[key] = int(value)
+        
+        print(f"⚙️ Settings updated via API: {APP_CONFIG}")
+        return jsonify({"success": True, "settings": APP_CONFIG})
+    except Exception as e:
+        return jsonify({"success": False, "error": str(e)}), 500
 # ==========================================
 # 6. MAIN SERVER EXECUTION
 # ==========================================
