@@ -1,0 +1,30 @@
+# Python cache
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+
+# Virtual environment
+venv/
+env/
+
+# Environment variables (secrets)
+.env
+
+# Temporary files (Updated to match your folder structure)
+temp_inference/
+
+# Uploads (user generated)
+uploads/
+
+# Static generated detections
+static/detections/
+
+# Database (optional - ignore if local dev DB)
+*.db
+
+# Ignore test file
+testweapon.py
+
+# Ignore folder
+speciesnet_model/
