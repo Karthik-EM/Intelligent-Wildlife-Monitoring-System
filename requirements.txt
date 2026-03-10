@@ -6,7 +6,7 @@ Flask==3.1.2
 flask-cors==6.0.2
 Flask-SQLAlchemy==3.1.1
 Werkzeug==3.1.5
-
+Flask-SocketIO==5.6.1
 # --- Image Processing ---
 opencv-python==4.10.0.84
 pillow>=11.0,<12.0
