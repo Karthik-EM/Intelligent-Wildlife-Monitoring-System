@@ -28,7 +28,7 @@ from datetime import datetime
 from dotenv import load_dotenv
 # AI Model imports
 from inference import get_model
-
+from flask_socketio import SocketIO
 # ==========================================
 # 1. INITIALIZATION & SETUP
 # ==========================================
@@ -44,7 +44,8 @@ APP_CONFIG = {
     "sensor_cooldown": 5,                # Wait 5 seconds before repeating sensor alerts
     "weapon_confidence_threshold": 0.30, # Minimum confidence for weapon detection
     "species_confidence_threshold": 0.55, # Minimum confidence for wildlife in video smart filter
-    "time_gap_threshold": 5              # Spam prevention gap per species in video processing
+    "time_gap_threshold": 5,          # Spam prevention gap per species in video processing
+    "esp_timeout": 60              #esp32 disconect time
 }
 
 # Trackers to prevent notification spam
@@ -70,7 +71,8 @@ for folder in [DETECTIONS_DIR, VIDEO_DIR, TEMP_DIR, UPLOAD_DIR, os.path.join(BAS
 # Initialize the Flask Web App
 app = Flask(__name__)
 CORS(app) # Allows front-end to talk to back-end easily
-
+# Initialize WebSockets for real-time dashboard updates
+socketio = SocketIO(app, cors_allowed_origins="*")
 # Detect if we have a GPU available
 DEVICE = "cuda" if torch.cuda.is_available() else "cpu"
 
@@ -453,6 +455,15 @@ def on_mqtt_message(client, userdata, msg):
                 last_status[k] = data[k]
                 if k == "gunshot" and data[k] == 1: 
                     gunshot_timestamp = current_time
+        # --- NEW: BROADCAST TO WEBSOCKETS ---
+        # Push the updated status to the frontend instantly
+        with app.app_context():
+            socketio.emit('sensor_update', {
+                **last_status,
+                "esp_online": True,
+                "gunshot": 1 if (current_time - gunshot_timestamp) < 5 else 0,
+                "model_loaded": model_manager.model is not None
+            })
 
         # Sensor-specific logic and logging
         if msg.topic == "security/events":
@@ -697,16 +708,29 @@ def detect():
         traceback.print_exc()
         return jsonify(success=False, error=str(e)), 500
 
-@app.route('/status')
-def status():
-    """Endpoint for web dashboard to poll live sensor data."""
+# ==========================================
+# 6. WEBSOCKET EVENTS (Real-Time Dashboard)
+# ==========================================
+
+@socketio.on('connect')
+def handle_connect():
+    """
+    Fires the moment a user opens the web dashboard.
+    Sends the current hardware state immediately so the UI doesn't load empty.
+    """
     t = time.time()
-    return jsonify({
+    current_status = {
         **last_status,
-        "esp_online": (t - last_seen) < 62, # Heartbeat check
+        "esp_online": (t - last_seen) < APP_CONFIG["esp_timeout"], 
         "gunshot": 1 if (t - gunshot_timestamp) < 5 else 0,
         "model_loaded": model_manager.model is not None
-    })
+    }
+    socketio.emit('sensor_update', current_status)
+    print("🟢 Web client connected to real-time dashboard.")
+
+@socketio.on('disconnect')
+def handle_disconnect():
+    print("🔴 Web client disconnected.")
 
 @app.route('/api/video/upload', methods=['POST'])
 def upload_video():
@@ -823,9 +847,39 @@ def update_settings():
         return jsonify({"success": True, "settings": APP_CONFIG})
     except Exception as e:
         return jsonify({"success": False, "error": str(e)}), 500
+# --- ESP32 WATCHDOG MONITOR ---
+def watchdog_monitor():
+    """Continuously checks if the ESP32 timed out and forces the UI offline if it did."""
+    global last_seen
+    esp_was_online = False # Start by assuming offline
+    
+    while True:
+        time.sleep(5) # Wake up and check every 5 seconds
+        current_time = time.time()
+        
+        # Check if we have heard from the ESP32 in the last n seconds
+        is_online = (current_time - last_seen) < APP_CONFIG["esp_timeout"] and last_seen != 0
+        
+        # If the state changed (it just went offline, or just came back online)
+        if is_online != esp_was_online:
+            esp_was_online = is_online
+            print(f"📡 Watchdog: ESP32 is now {'ONLINE' if is_online else 'OFFLINE'}")
+            
+            # Force a WebSocket push to the UI to update the connection cards
+            try:
+                with app.app_context():
+                    socketio.emit('sensor_update', {
+                        **last_status,
+                        "esp_online": is_online,
+                        "gunshot": 1 if (current_time - gunshot_timestamp) < 5 else 0,
+                        "model_loaded": model_manager.model is not None
+                    })
+            except Exception as e:
+                pass
 # ==========================================
 # 6. MAIN SERVER EXECUTION
 # ==========================================
+
 if __name__ == '__main__':
     print("\n🚀 STARTING WILDLIFE SERVER (LOCAL ONLY) 🚀\n")
     
@@ -842,11 +896,12 @@ if __name__ == '__main__':
         mqtt_client.loop_start() 
     except Exception as e:
         print(f"⚠️ Could not connect to MQTT Broker. Is Mosquitto running? Error: {e}")
-
+# Start the Watchdog Monitor in the background
+    Thread(target=watchdog_monitor, daemon=True).start()
     print(f"\n{'='*60}")
     print(f"🌐 LOCAL URL: http://127.0.0.1:5000")
    # print(f"🌐 TEST URL:  http://127.0.0.1:5000/test")
     print(f"{'='*60}\n")
-    
-    # 3. Start the Flask web server
-    app.run(host='0.0.0.0', port=5000, debug=True, threaded=False)
+
+ # 3. Start the Flask & WebSocket server
+    socketio.run(app, host='0.0.0.0', port=5000, debug=False)
