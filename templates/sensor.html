@@ -265,11 +265,12 @@ body {
     </div>
 </div>
 
+<script src="https://cdnjs.cloudflare.com/ajax/libs/socket.io/4.7.2/socket.io.min.js"></script>
+
 <script>
     // ==========================================
     // SENSOR LOGIC
     // ==========================================
-
     // State Tracking
     let lastOnlineState = null;
     let lastGunshot = 0;
@@ -317,13 +318,8 @@ function addLog(msg, type, customTime = null) {
         if(feed.children.length > 50) feed.lastElementChild.remove();
     }
     // --- Main Update Loop ---
-    async function updateStatus() {
+    function processLiveData(data) {
         try {
-            // Fetch data from Python Server
-            const res = await fetch("/status", { cache: "no-store" });
-            if (!res.ok) throw new Error("API Error");
-            const data = await res.json();
-            
             const dot = document.getElementById('global-dot');
             const gText = document.getElementById('global-text');
 
@@ -342,7 +338,6 @@ function addLog(msg, type, customTime = null) {
                 gText.style.color = '#00e676';
 
                 // 2. Health (RSSI & Temp)
-                // Use nullish coalescing to handle missing data gracefully
                 const temp = (data.temp !== null && data.temp !== undefined) ? Number(data.temp).toFixed(1) + "°C" : "--";
                 const rssi = (data.rssi !== null && data.rssi !== undefined) ? data.rssi + " dBm" : "--";
                 updateCard('sysBox', 'ok', rssi, `Temp: ${temp}`);
@@ -412,12 +407,11 @@ function addLog(msg, type, customTime = null) {
 
         } catch (e) {
             console.error(e);
-            // Server itself might be down
-            updateCard('espBox', 'offline', 'Error', 'Server Unreachable');
+            updateCard('espBox', 'offline', 'Error', 'UI Render Error');
         }
     }
+
     // --- Send WAKE Command to Backend ---
-// --- Send WAKE Command to Backend ---
     async function wakeCamera() {
         const btn = document.getElementById('wakeBtn');
         const originalHTML = '<span>📷</span> Wake Camera';
@@ -453,7 +447,8 @@ function addLog(msg, type, customTime = null) {
             btn.innerHTML = originalHTML;
         }, 2000);
     }
-// --- Load History from Database ---
+
+    // --- Load History from Database ---
     async function loadLogHistory() {
         try {
             const res = await fetch("/api/sensor_history");
@@ -489,11 +484,30 @@ function addLog(msg, type, customTime = null) {
             console.error("Failed to load history:", e);
         }
     }
-    // Start Loop
+
+    // ==========================================
+    // WEBSOCKET INITIALIZATION (Replaces old Polling)
+    // ==========================================
+    const socket = io(); // Connects to the host server automatically
+
+    // 1. Listen for the live data pushed by Python
+    socket.on('sensor_update', function(data) {
+        processLiveData(data);
+    });
+
+    // 2. Handle server disconnects smoothly
+    socket.on('disconnect', function() {
+        processLiveData({ esp_online: false }); // Force UI into offline mode
+        addLog("Disconnected from Central Server", "danger");
+    });
+
+    socket.on('connect', function() {
+        addLog("Connected to Central Server via WebSockets", "ok");
+    });
+
+    // 3. Start by loading old history (No more setInterval!)
     loadLogHistory().then(() => {
-        addLog("Dashboard initialized. Live polling started.", "ok");
-        setInterval(updateStatus, 1000); // Poll every 1 second
-        updateStatus(); // Run once immediately
+        addLog("History loaded. Waiting for live telemetry...", "ok");
     });
 </script>
 </body>
