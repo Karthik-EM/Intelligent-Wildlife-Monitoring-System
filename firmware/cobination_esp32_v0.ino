@@ -66,9 +66,9 @@ ArduinoFFT<double> FFT = ArduinoFFT<double>();
 WiFiClient espClient;
 PubSubClient mqttClient(espClient);
 const int mqttPort = 1883;
-const char* topicEvents = "security/events";       
-const char* topicHeartbeat = "security/heartbeat"; 
-const char* topicCommand = "security/command"; // --- NEW TOPIC ---
+const char* topicEvents = "security/main/events";       
+const char* topicHeartbeat = "security/main/heartbeat"; 
+const char* topicCommand = "security/main/command";
 
 // Audio Buffers
 double vReal[SAMPLES_PER_CHUNK];
