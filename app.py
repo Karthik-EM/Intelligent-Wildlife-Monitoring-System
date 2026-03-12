@@ -426,7 +426,7 @@ gunshot_timestamp = 0
 def on_mqtt_connect(client, userdata, flags, rc):
     """Fires when local MQTT broker connects."""
     print(f"✅ Connected to MQTT Broker with result code {rc}")
-    client.subscribe([("security/events", 0), ("security/heartbeat", 0)])
+    client.subscribe([("security/main/events", 0), ("security/main/heartbeat", 0)])
 
 def on_mqtt_message(client, userdata, msg):
     """Processes incoming sensor data from ESP32."""
