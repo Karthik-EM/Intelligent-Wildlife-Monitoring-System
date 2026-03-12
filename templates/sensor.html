@@ -67,7 +67,31 @@
         @keyframes fadeIn { to { opacity: 1; } }
 
         /* Left Panel */
-        .sensor-panel { display: flex; flex-direction: column; gap: 1rem; height: 100%; }
+     
+.sensor-panel { 
+    display: flex; 
+    flex-direction: column; 
+    gap: 1.2rem; 
+    height: 100%; 
+    overflow-y: auto;      /* This is the magic line that enables scrolling */
+    padding-right: 10px;   /* Adds a tiny gap so the scrollbar doesn't touch the cards */
+    padding-bottom: 20px;  /* Ensures the bottom card isn't glued to the edge of the screen */
+}
+
+/* Make the scrollbar look modern, invisible until needed */
+.sensor-panel::-webkit-scrollbar {
+    width: 6px;
+}
+.sensor-panel::-webkit-scrollbar-track {
+    background: transparent; 
+}
+.sensor-panel::-webkit-scrollbar-thumb {
+    background-color: #d1d1d1; 
+    border-radius: 10px;
+}
+.sensor-panel::-webkit-scrollbar-thumb:hover {
+    background-color: #a8a8a8;
+}
         
         /* Command Center Header */
         .header-area { display: flex; justify-content: space-between; align-items: center; background: white; padding: 0.8rem 1.2rem; border-radius: 12px; box-shadow: 0 4px 20px rgba(0,0,0,0.04); flex-shrink: 0; }
@@ -260,49 +284,67 @@
                 </div>
             </div>
 
-            <div class="node-container">
-                
+           <div class="node-container">
                 <div class="node-header">
                     <div class="node-title-area">
-                        <div class="node-indicator-bar" id="node-bar"></div>
+                        <div class="node-indicator-bar" id="node-bar-main"></div>
                         <div class="node-titles">
-                            <h2>NODE 01: BASE STATION</h2>
+                            <h2>NODE 0: Main unit</h2>
                             <div class="node-stats">
-                                <span>LINK: <strong id="val-link">WAITING</strong></span>
-                                <span>RSSI: <strong id="val-rssi">--</strong></span>
-                                <span>TEMP: <strong id="val-temp">--</strong></span>
+                                <span>LINK: <strong id="val-link-main">WAITING</strong></span>
+                                <span>RSSI: <strong id="val-rssi-main">--</strong></span>
+                                <span>TEMP: <strong id="val-temp-main">--</strong></span>
                             </div>
                         </div>
                     </div>
-                    <div class="node-status-dot" id="node-dot"></div>
+                    <div class="node-status-dot" id="node-dot-main"></div>
                 </div>
 
                 <div class="sensor-grid-row">
-                    
-                    <div id="tiltBox" class="card">
-                        <div class="card-label">
-                            <span class="card-icon">📐</span>
-                            TILT / TAMPER
-                        </div>
+                    <div id="tiltBox-main" class="card">
+                        <div class="card-label"><span class="card-icon">📐</span> TILT / TAMPER</div>
                         <div class="card-value">--°</div>
                     </div>
-
-                    <div id="motionBox" class="card">
-                        <div class="card-label">
-                            <span class="card-icon">🏃</span>
-                            PIR MOTION
-                        </div>
+                    <div id="motionBox-main" class="card">
+                        <div class="card-label"><span class="card-icon">🏃</span> PIR MOTION</div>
                         <div class="card-value">--</div>
                     </div>
-
-                    <div id="gunshotBox" class="card">
-                        <div class="card-label">
-                            <span class="card-icon" style="color: #c62828;">🛡️</span>
-                            ACOUSTIC
-                        </div>
+                    <div id="gunshotBox-main" class="card">
+                        <div class="card-label"><span class="card-icon" style="color: #c62828;">🛡️</span> ACOUSTIC</div>
                         <div class="card-value">--</div>
                     </div>
+                </div>
+            </div>
 
+            <div class="node-container">
+                <div class="node-header">
+                    <div class="node-title-area">
+                        <div class="node-indicator-bar" id="node-bar-node1"></div>
+                        <div class="node-titles">
+                            <h2>NODE 1</h2>
+                            <div class="node-stats">
+                                <span>LINK: <strong id="val-link-node1">WAITING</strong></span>
+                                <span>RSSI: <strong id="val-rssi-node1">--</strong></span>
+                                <span>TEMP: <strong id="val-temp-node1">--</strong></span>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="node-status-dot" id="node-dot-node1"></div>
+                </div>
+
+                <div class="sensor-grid-row">
+                    <div id="envBox-node1" class="card">
+                        <div class="card-label"><span class="card-icon">🌡️</span> CLIMATE</div>
+                        <div class="card-value" style="font-size: 1.7rem;">-- / --</div>
+                    </div>
+                    <div id="motionBox-node1" class="card">
+                        <div class="card-label"><span class="card-icon">🏃</span> PIR MOTION</div>
+                        <div class="card-value">--</div>
+                    </div>
+                    <div id="gunshotBox-node1" class="card">
+                        <div class="card-label"><span class="card-icon" style="color: #c62828;">🛡️</span> ACOUSTIC</div>
+                        <div class="card-value">--</div>
+                    </div>
                 </div>
             </div>
         </div>
@@ -322,21 +364,22 @@
 <script src="https://cdnjs.cloudflare.com/ajax/libs/socket.io/4.7.2/socket.io.min.js"></script>
 
 <script>
+   // ==========================================
+    // SENSOR LOGIC (MULTI-NODE)
     // ==========================================
-    // SENSOR LOGIC
-    // ==========================================
-    let lastOnlineState = null;
-    let lastGunshot = 0;
-    let lastMotion = 0;
-    let lastTiltHigh = false;
-
+    
+    // Memory tracker for all our different cameras
+// Memory tracker for all our different cameras
+    const fleetMemory = {
+        "main": { online: null, gunshot: 0, motion: 0, tiltHigh: false, gunshotTimer: null },
+        "node1": { online: null, gunshot: 0, motion: 0, tiltHigh: false, gunshotTimer: null }
+    };
     // --- UI Helpers ---
     function updateCard(id, state, value) {
         const card = document.getElementById(id);
         if (!card) return; 
 
         const valEl = card.querySelector('.card-value');
-        
         card.classList.remove('status-ok', 'status-warn', 'status-danger', 'status-offline');
         if(state) card.classList.add(`status-${state}`);
         if(valEl) valEl.textContent = value;
@@ -365,104 +408,134 @@
     // --- Main Update Loop ---
     function processLiveData(data) {
         try {
+            // Figure out which node is talking, default to "main" if it's missing somehow
+            const nId = data.node_id || "main"; 
+            
+            // If we don't know this node yet, create a memory slot for it
+            if (!fleetMemory[nId]) {
+                fleetMemory[nId] = { online: null, gunshot: 0, motion: 0, tiltHigh: false };
+            }
+            const nodeMem = fleetMemory[nId];
+
+            // Global DOM Elements
             const globalDot = document.getElementById('global-dot');
             const gText = document.getElementById('global-text');
             
-            // Node specific DOM elements
-            const nodeBar = document.getElementById('node-bar');
-            const nodeDot = document.getElementById('node-dot');
-            const valLink = document.getElementById('val-link');
-            const valRssi = document.getElementById('val-rssi');
-            const valTemp = document.getElementById('val-temp');
+            // Node-Specific DOM Elements (Dynamically grabbed using the nId)
+            const nodeBar = document.getElementById(`node-bar-${nId}`);
+            const nodeDot = document.getElementById(`node-dot-${nId}`);
+            const valLink = document.getElementById(`val-link-${nId}`);
+            const valRssi = document.getElementById(`val-rssi-${nId}`);
+            const valTemp = document.getElementById(`val-temp-${nId}`);
+
+            const nodePrefix = `[${nId.toUpperCase()}]`;
 
             // 1. Connection Logic & Header Data
             if (data.esp_online) {
-                if (lastOnlineState === false) addLog("Connection restored", "ok");
-                lastOnlineState = true;
+                if (nodeMem.online === false) addLog(`${nodePrefix} Connection restored`, "ok");
+                nodeMem.online = true;
                 
-                // Global Header Updates
+                // Global Header Updates (Green if at least this one is connected)
                 globalDot.style.backgroundColor = '#00e676'; 
                 globalDot.style.boxShadow = '0 0 10px #00e676';
                 gText.textContent = "System Nominal"; 
                 gText.style.color = '#00e676';
 
                 // Node Header Updates
-                nodeBar.style.backgroundColor = '#00e676';
-                nodeDot.style.backgroundColor = '#00e676';
-                nodeDot.style.boxShadow = '0 0 10px #00e676';
-                valLink.textContent = "STABLE";
-                valLink.style.color = "#00e676";
+                if(nodeBar) nodeBar.style.backgroundColor = '#00e676';
+                if(nodeDot) { nodeDot.style.backgroundColor = '#00e676'; nodeDot.style.boxShadow = '0 0 10px #00e676'; }
+                if(valLink) { valLink.textContent = "STABLE"; valLink.style.color = "#00e676"; }
                 
                 const temp = (data.temp !== null && data.temp !== undefined) ? Number(data.temp).toFixed(1) + "°C" : "--";
                 const rssi = (data.rssi !== null && data.rssi !== undefined) ? data.rssi + "dBm" : "--";
-                valRssi.textContent = rssi;
-                valTemp.textContent = temp;
-
+                if(valRssi) valRssi.textContent = rssi;
+                if(valTemp) valTemp.textContent = temp;
+                // --- NEW: CLIMATE CARD FOR NODE 1 ---
+                if (nId === "node1") {
+                    const dhtTemp = (data.dht_temp !== null && data.dht_temp !== undefined) ? Number(data.dht_temp).toFixed(1) + "°C" : "--";
+                    const hum = (data.humidity !== null && data.humidity !== undefined) ? Number(data.humidity).toFixed(0) + "%" : "--";
+                    updateCard('envBox-node1', 'ok', `${dhtTemp} / ${hum}`);
+                }
                 // 2. Tilt Sensor
                 const angle = Number(data.tilt || 0);
                 if (Math.abs(angle) > 30) {
-                    updateCard('tiltBox', 'warn', angle.toFixed(1) + "°");
-                    if(!lastTiltHigh) addLog(`Tilt Alert: ${angle.toFixed(1)}°`, "warn");
-                    lastTiltHigh = true;
+                    updateCard(`tiltBox-${nId}`, 'warn', angle.toFixed(1) + "°");
+                    if(!nodeMem.tiltHigh) addLog(`${nodePrefix} Tilt Alert: ${angle.toFixed(1)}°`, "warn");
+                    nodeMem.tiltHigh = true;
                 } else {
-                    updateCard('tiltBox', 'ok', angle.toFixed(1) + "°");
-                    lastTiltHigh = false;
+                    updateCard(`tiltBox-${nId}`, 'ok', angle.toFixed(1) + "°");
+                    nodeMem.tiltHigh = false;
                 }
 
                 // 3. Motion Sensor
                 const motion = Number(data.motion || 0);
                 if (motion === 1) {
-                    updateCard('motionBox', 'warn', 'DETECTED');
-                    if(lastMotion === 0) {
-                        addLog("Motion detected at perimeter", "warn");
+                    updateCard(`motionBox-${nId}`, 'warn', 'DETECTED');
+                    if(nodeMem.motion === 0) {
+                        addLog(`${nodePrefix} Motion detected`, "warn");
                         gText.textContent = "Activity Detected"; 
                         gText.style.color = "#ffab00";
                         globalDot.style.backgroundColor = "#ffab00";
                     }
                 } else {
-                    updateCard('motionBox', 'ok', 'CLEAR');
+                    updateCard(`motionBox-${nId}`, 'ok', 'CLEAR');
                 }
-                lastMotion = motion;
+                nodeMem.motion = motion;
 
-                // 4. Gunshot Sensor (Critical)
+// 4. Gunshot Sensor (Critical)
                 const gunshot = Number(data.gunshot || 0);
                 if (gunshot === 1) {
-                    updateCard('gunshotBox', 'danger', 'DETECTED');
-                    if(lastGunshot === 0) {
-                        addLog("CRITICAL: GUNSHOT DETECTED", "danger");
+                    updateCard(`gunshotBox-${nId}`, 'danger', 'DETECTED');
+                    
+                    if(nodeMem.gunshot === 0) {
+                        addLog(`${nodePrefix} CRITICAL: GUNSHOT DETECTED`, "danger");
                         gText.textContent = "SECURITY ALERT"; 
                         gText.style.color = "#ff1744";
                         globalDot.style.backgroundColor = "#ff1744";
                         globalDot.style.boxShadow = '0 0 20px #ff1744';
                     }
+                    nodeMem.gunshot = 1;
+
+                    // --- NEW: FRONTEND AUTO-CLEAR TIMER ---
+                    // If a timer is already running, cancel it so we can restart the 5 seconds
+                    if (nodeMem.gunshotTimer) clearTimeout(nodeMem.gunshotTimer);
+                    
+                    // Start a precise 5-second countdown to turn the card green again
+                    nodeMem.gunshotTimer = setTimeout(() => {
+                        updateCard(`gunshotBox-${nId}`, 'ok', 'SAFE');
+                        nodeMem.gunshot = 0;
+                        
+                        // Check if the other camera is also clear before resetting the global header
+                        const otherNode = nId === "main" ? "node1" : "main";
+                        if (fleetMemory[otherNode].gunshot === 0 && fleetMemory[otherNode].motion === 0 && nodeMem.motion === 0) {
+                            gText.textContent = "System Nominal"; 
+                            gText.style.color = '#00e676';
+                            globalDot.style.backgroundColor = '#00e676';
+                            globalDot.style.boxShadow = '0 0 10px #00e676';
+                        }
+                    }, 3000); // 3000 milliseconds = EXACTLY 5 seconds
+
                 } else {
-                    updateCard('gunshotBox', 'ok', 'SAFE');
+                    updateCard(`gunshotBox-${nId}`, 'ok', 'SAFE');
+                    nodeMem.gunshot = 0;
                 }
-                lastGunshot = gunshot;
 
             } else {
                 // --- Offline Mode ---
-                if(lastOnlineState === true) addLog("Lost connection to ESP32", "danger");
-                lastOnlineState = false;
+                if(nodeMem.online === true) addLog(`${nodePrefix} Lost connection`, "danger");
+                nodeMem.online = false;
                 
-                // Global UI Reset
-                globalDot.style.backgroundColor = '#546e7a'; 
-                globalDot.style.boxShadow = 'none';
-                gText.textContent = "Device Offline"; 
-                gText.style.color = '#546e7a';
-
                 // Node UI Reset
-                nodeBar.style.backgroundColor = '#546e7a';
-                nodeDot.style.backgroundColor = '#546e7a';
-                nodeDot.style.boxShadow = 'none';
-                valLink.textContent = "OFFLINE";
-                valLink.style.color = "#546e7a";
-                valRssi.textContent = "--";
-                valTemp.textContent = "--";
+                if(nodeBar) nodeBar.style.backgroundColor = '#546e7a';
+                if(nodeDot) { nodeDot.style.backgroundColor = '#546e7a'; nodeDot.style.boxShadow = 'none'; }
+                if(valLink) { valLink.textContent = "OFFLINE"; valLink.style.color = "#546e7a"; }
+                if(valRssi) valRssi.textContent = "--";
+                if(valTemp) valTemp.textContent = "--";
 
-                updateCard('tiltBox', 'offline', '--');
-                updateCard('motionBox', 'offline', '--');
-                updateCard('gunshotBox', 'offline', '--');
+                updateCard(`tiltBox-${nId}`, 'offline', '--');
+                updateCard(`envBox-${nId}`, 'offline', '-- / --');
+                updateCard(`motionBox-${nId}`, 'offline', '--');
+                updateCard(`gunshotBox-${nId}`, 'offline', '--');
             }
 
         } catch (e) {
@@ -503,6 +576,7 @@
     }
 
     // --- Load History from Database ---
+// --- Load History from Database ---
     async function loadLogHistory() {
         try {
             const res = await fetch("/api/sensor_history");
@@ -511,12 +585,41 @@
             if (data.success && data.events) {
                 const reversedEvents = data.events.reverse();
                 reversedEvents.forEach(event => {
-                    let msg = ""; let type = "ok";
-                    if (event.type === "motion") { msg = "Motion detected at perimeter"; type = "warn"; } 
-                    else if (event.type === "tilt") { msg = `Tilt Alert: ${Number(event.value).toFixed(1)}°`; type = "warn"; } 
-                    else if (event.type === "gunshot") { msg = "CRITICAL: GUNSHOT DETECTED"; type = "danger"; } 
-                    else if (event.type === "system" && event.value === 1.0) { msg = "Camera manually awakened"; type = "ok"; }
-                    addLog(msg, type, event.timestamp);
+                    
+                    // SMART PARSER: Handle both old data ("motion") and new data ("node1_motion")
+                    let nodeId = "MAIN";
+                    let actualType = event.type;
+                    
+                    if (event.type.includes('_')) {
+                        const parts = event.type.split('_');
+                        nodeId = parts[0].toUpperCase();
+                        actualType = parts.slice(1).join('_'); // gets the rest of the string
+                    }
+
+                    const prefix = `[${nodeId}]`;
+                    let msg = ""; 
+                    let type = "ok";
+                    
+                    if (actualType === "motion") { 
+                        msg = `${prefix} Motion detected`; 
+                        type = "warn"; 
+                    } 
+                    else if (actualType === "tilt") { 
+                        msg = `${prefix} Tilt Alert: ${Number(event.value).toFixed(1)}°`; 
+                        type = "warn"; 
+                    } 
+                    else if (actualType === "gunshot") { 
+                        msg = `${prefix} CRITICAL: GUNSHOT DETECTED`; 
+                        type = "danger"; 
+                    } 
+                    else if (actualType === "system" && event.value === 1.0) { 
+                        msg = `${prefix} Camera manually awakened`; 
+                        type = "ok"; 
+                    }
+
+                    if (msg !== "") {
+                        addLog(msg, type, event.timestamp);
+                    }
                 });
             }
         } catch (e) { console.error("Failed to load history:", e); }
