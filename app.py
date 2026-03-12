@@ -45,11 +45,11 @@ APP_CONFIG = {
     "weapon_confidence_threshold": 0.30, # Minimum confidence for weapon detection
     "species_confidence_threshold": 0.55, # Minimum confidence for wildlife in video smart filter
     "time_gap_threshold": 5,          # Spam prevention gap per species in video processing
-    "esp_timeout": 60              #esp32 disconect time
+    "esp_timeout": 60 ,            #esp32 disconect time
+    "gunshot_alert_duration": 3    # How many seconds the gunshot alert stays RED
 }
 
-# Trackers to prevent notification spam
-sensor_alert_history = {"motion": 0, "tilt": 0, "gunshot": 0}
+
 # --- Define Folder Paths ---
 BASE_DIR = os.getcwd()
 MODEL_FOLDER = os.path.join(BASE_DIR, "speciesnet_model")
@@ -416,89 +416,109 @@ class BatchVideoProcessor:
 # ==========================================
 
 # --- Sensor Globals ---
-last_status = {
-    "motion": 0, "tilt": 0.0, "gunshot": 0, "temp": None,
-    "free_heap": None, "min_heap": None, "rssi": None, "uptime": None
-}
-last_seen = 0
-gunshot_timestamp = 0
+fleet_state = {} # Dynamically stores data for main, node1, node2, etc.
 
 def on_mqtt_connect(client, userdata, flags, rc):
     """Fires when local MQTT broker connects."""
     print(f"✅ Connected to MQTT Broker with result code {rc}")
-    client.subscribe([("security/main/events", 0), ("security/main/heartbeat", 0)])
+    # The '+' wildcard tells the server to listen to ALL cameras
+    client.subscribe([("security/+/events", 0), ("security/+/heartbeat", 0)])
 
 def on_mqtt_message(client, userdata, msg):
-    """Processes incoming sensor data from ESP32."""
-    global last_status, last_seen, gunshot_timestamp, sensor_alert_history
+    """Processes incoming sensor data from ANY ESP32 unit."""
+    global fleet_state
     current_time = time.time()
-    last_seen = current_time
 
-    # Helper function to save to DB from a background thread
+    # Extract the node ID from the topic (e.g., "security/main/events" -> "main")
+    topic_parts = msg.topic.split('/')
+    if len(topic_parts) < 3: return
+    node_id = topic_parts[1]
+    msg_type = topic_parts[2]
+
+    # If this is a new camera connecting, create a memory profile for it
+    if node_id not in fleet_state:
+        fleet_state[node_id] = {
+            "status": {"motion": 0, "tilt": 0.0, "gunshot": 0, "temp": None, "dht_temp": None, "humidity": None, "free_heap": None, "min_heap": None, "rssi": None, "uptime": None},
+            "last_seen": 0,
+            "gunshot_timestamp": 0,
+            "alert_history": {"motion": 0, "tilt": 0, "gunshot": 0},
+            "esp_online": True
+        }
+
+    # Grab this specific camera's memory
+    node = fleet_state[node_id]
+    node["last_seen"] = current_time
+
+    # Helper function to save to DB (Prepends the node_id to the event type)
     def log_event_to_db(event_type, value=None):
         with app.app_context():
-            new_event = SensorEvent(event_type=event_type, value=value)
+            db_event_type = f"{node_id}_{event_type}"
+            new_event = SensorEvent(event_type=db_event_type, value=value)
             db.session.add(new_event)
             db.session.commit()
-            print(f"💾 Logged {event_type.upper()} event to database.")
+            print(f"💾 Logged {db_event_type.upper()} event to database.")
 
     try:
         payload = msg.payload.decode('utf-8')
         data = json.loads(payload)
         
-        if msg.topic == "security/events":
-            print(f"📨 ESP Event [{msg.topic}]: {data}")
+        if msg_type == "events":
+            print(f"📨 {node_id.upper()} Event: {data}")
+        elif msg_type == "heartbeat":
+            print(f"💓 {node_id.upper()} Heartbeat: {data}")
 
-        # Update global status memory for the web dashboard to read
-        for k in last_status:
+        # Update specific node status
+        for k in node["status"]:
             if k in data:
-                last_status[k] = data[k]
+                node["status"][k] = data[k]
                 if k == "gunshot" and data[k] == 1: 
-                    gunshot_timestamp = current_time
-        # --- NEW: BROADCAST TO WEBSOCKETS ---
-        # Push the updated status to the frontend instantly
+                    node["gunshot_timestamp"] = current_time
+
+        # Broadcast to WebSockets (Includes the node_id so UI knows which card to update)
         with app.app_context():
             socketio.emit('sensor_update', {
-                **last_status,
+                "node_id": node_id,
+                **node["status"],
                 "esp_online": True,
-                "gunshot": 1 if (current_time - gunshot_timestamp) < 5 else 0,
+                "gunshot": 1 if (current_time - node["gunshot_timestamp"]) < APP_CONFIG["gunshot_alert_duration"] else 0,
                 "model_loaded": model_manager.model is not None
             })
 
-        # Sensor-specific logic and logging
-        if msg.topic == "security/events":
+        # Process Sensor Alerts
+        if msg_type == "events":
             
             # 1. MOTION
             if data.get('motion') == 1:
-                if (current_time - sensor_alert_history['motion']) > APP_CONFIG["sensor_cooldown"]:
-                    msg_text = f"🏃 *MOTION DETECTED* 🏃\n\n⏱️ *Time:* {datetime.now().strftime('%H:%M:%S')}\n📍 *Unit:* Field Cam 01"
+                if (current_time - node["alert_history"]['motion']) > APP_CONFIG["sensor_cooldown"]:
+                    msg_text = f"🏃 *MOTION DETECTED* 🏃\n\n⏱️ *Time:* {datetime.now().strftime('%H:%M:%S')}\n📍 *Unit:* {node_id.upper()}"
                     Thread(target=send_telegram_alert, args=(msg_text,)).start()
-                    log_event_to_db("motion") # Save to DB
-                    sensor_alert_history['motion'] = current_time
+                    log_event_to_db("motion") 
+                    node["alert_history"]['motion'] = current_time
 
             # 2. TILT
             tilt_val = data.get('tilt', 0.0)
-            if tilt_val > 30: # If camera falls off tree
-                if (current_time - sensor_alert_history['tilt']) > APP_CONFIG["sensor_cooldown"]:
-                    msg_text = f"⚠️ *DEVICE TILT WARNING* ⚠️\n\n📉 *Angle:* {tilt_val}°\n📍 *Unit:* Field Cam 01\nCheck mounting immediately."
+            if tilt_val > 30: 
+                if (current_time - node["alert_history"]['tilt']) > APP_CONFIG["sensor_cooldown"]:
+                    msg_text = f"⚠️ *DEVICE TILT WARNING* ⚠️\n\n📉 *Angle:* {tilt_val}°\n📍 *Unit:* {node_id.upper()}"
                     Thread(target=send_telegram_alert, args=(msg_text,)).start()
-                    log_event_to_db("tilt", tilt_val) # Save to DB with angle
-                    sensor_alert_history['tilt'] = current_time
+                    log_event_to_db("tilt", tilt_val) 
+                    node["alert_history"]['tilt'] = current_time
 
             # 3. GUNSHOT
             if data.get('gunshot') == 1: 
-                if (current_time - sensor_alert_history['gunshot']) > 1:
-                    msg_text = f"🔥 *GUNSHOT DETECTED* 🔥\n\n⏱️ *Time:* {datetime.now().strftime('%H:%M:%S')}\n📍 *Unit:* Field Cam 01\n*IMMEDIATE ACTION REQUIRED*"
+                if (current_time - node["alert_history"]['gunshot']) > 1:
+                    msg_text = f"🔥 *GUNSHOT DETECTED* 🔥\n\n⏱️ *Time:* {datetime.now().strftime('%H:%M:%S')}\n📍 *Unit:* {node_id.upper()}\n*IMMEDIATE ACTION REQUIRED*"
                     Thread(target=send_telegram_alert, args=(msg_text,)).start()
-                    log_event_to_db("gunshot") # Save to DB
-                    sensor_alert_history['gunshot'] = current_time
-            # 4. MANUAL WAKE ACKNOWLEDGMENT
+                    log_event_to_db("gunshot") 
+                    node["alert_history"]['gunshot'] = current_time
+
+            # 4. MANUAL WAKE
             if data.get('manual_wake') == 1:
-                log_event_to_db("system", value=1.0) # Logging as a system event
-                print("✅ Received ACK: Camera manually awakened by user.")
+                log_event_to_db("system", value=1.0)
+                print(f"✅ Received ACK: {node_id.upper()} manually awakened.")
 
     except Exception as e:
-        print(f"❌ MQTT Error: {e}")
+        print(f"❌ MQTT Error on {node_id}: {e}")
 
 # --- FLASK ROUTES ---
 
@@ -713,20 +733,24 @@ def detect():
 # ==========================================
 
 @socketio.on('connect')
-def handle_connect():
+def handle_connect(auth=None): # Added auth=None to fix the TypeError
     """
     Fires the moment a user opens the web dashboard.
     Sends the current hardware state immediately so the UI doesn't load empty.
     """
+    global fleet_state
     t = time.time()
-    current_status = {
-        **last_status,
-        "esp_online": (t - last_seen) < APP_CONFIG["esp_timeout"], 
-        "gunshot": 1 if (t - gunshot_timestamp) < 5 else 0,
-        "model_loaded": model_manager.model is not None
-    }
-    socketio.emit('sensor_update', current_status)
     print("🟢 Web client connected to real-time dashboard.")
+    
+    # Loop through all known cameras and send their latest state to the UI
+    for node_id, node in fleet_state.items():
+        socketio.emit('sensor_update', {
+            "node_id": node_id,
+            **node["status"],
+            "esp_online": node["esp_online"],
+            "gunshot": 1 if (t - node["gunshot_timestamp"]) < APP_CONFIG["gunshot_alert_duration"] else 0,
+            "model_loaded": model_manager.model is not None
+        })
 
 @socketio.on('disconnect')
 def handle_disconnect():
@@ -815,7 +839,7 @@ def send_command():
         command = data.get('command')
         if command:
             # Publish to the exact topic the ESP32 is subscribed to
-            mqtt_client.publish("security/command", command)
+            mqtt_client.publish("security/main/command", command)
             return jsonify({"success": True, "message": f"Sent {command} to ESP32"})
         return jsonify({"success": False, "error": "No command provided"}), 400
     except Exception as e:
@@ -847,35 +871,36 @@ def update_settings():
         return jsonify({"success": True, "settings": APP_CONFIG})
     except Exception as e:
         return jsonify({"success": False, "error": str(e)}), 500
+    
 # --- ESP32 WATCHDOG MONITOR ---
 def watchdog_monitor():
-    """Continuously checks if the ESP32 timed out and forces the UI offline if it did."""
-    global last_seen
-    esp_was_online = False # Start by assuming offline
+    """Continuously checks if any ESP32 timed out and forces the UI offline if it did."""
+    global fleet_state
     
     while True:
         time.sleep(5) # Wake up and check every 5 seconds
         current_time = time.time()
         
-        # Check if we have heard from the ESP32 in the last n seconds
-        is_online = (current_time - last_seen) < APP_CONFIG["esp_timeout"] and last_seen != 0
-        
-        # If the state changed (it just went offline, or just came back online)
-        if is_online != esp_was_online:
-            esp_was_online = is_online
-            print(f"📡 Watchdog: ESP32 is now {'ONLINE' if is_online else 'OFFLINE'}")
+        # Check every camera in our memory
+        for node_id, node in fleet_state.items():
+            is_online = (current_time - node["last_seen"]) < APP_CONFIG["esp_timeout"] and node["last_seen"] != 0
             
-            # Force a WebSocket push to the UI to update the connection cards
-            try:
-                with app.app_context():
-                    socketio.emit('sensor_update', {
-                        **last_status,
-                        "esp_online": is_online,
-                        "gunshot": 1 if (current_time - gunshot_timestamp) < 5 else 0,
-                        "model_loaded": model_manager.model is not None
-                    })
-            except Exception as e:
-                pass
+            # If the state changed (it just went offline, or just came back online)
+            if is_online != node["esp_online"]:
+                node["esp_online"] = is_online
+                print(f"📡 Watchdog: {node_id.upper()} is now {'ONLINE' if is_online else 'OFFLINE'}")
+                
+                try:
+                    with app.app_context():
+                        socketio.emit('sensor_update', {
+                            "node_id": node_id,
+                            **node["status"],
+                            "esp_online": is_online,
+                            "gunshot": 1 if (current_time - node["gunshot_timestamp"]) < APP_CONFIG["gunshot_alert_duration"] else 0,
+                            "model_loaded": model_manager.model is not None
+                        })
+                except Exception:
+                    pass
 # ==========================================
 # 6. MAIN SERVER EXECUTION
 # ==========================================
