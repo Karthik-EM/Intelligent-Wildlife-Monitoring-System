@@ -41,12 +41,13 @@ ROBOFLOW_API_KEY = os.getenv('ROBOFLOW_API_KEY')
 
 # --- Dynamic Application Settings (Defaults) ---
 APP_CONFIG = {
-    "sensor_cooldown": 5,                # Wait 5 seconds before repeating sensor alerts
+    "sensor_cooldown": 5,                # Wait 5 seconds before repeating sensor alerts 
     "weapon_confidence_threshold": 0.30, # Minimum confidence for weapon detection
     "species_confidence_threshold": 0.55, # Minimum confidence for wildlife in video smart filter
     "time_gap_threshold": 5,          # Spam prevention gap per species in video processing
     "esp_timeout": 60 ,            #esp32 disconect time
-    "gunshot_alert_duration": 3    # How many seconds the gunshot alert stays RED
+    "gunshot_alert_duration": 3,    # How many seconds the gunshot alert stays RED
+    "node1_triggers_main": False
 }
 
 
@@ -494,6 +495,16 @@ def on_mqtt_message(client, userdata, msg):
                     Thread(target=send_telegram_alert, args=(msg_text,)).start()
                     log_event_to_db("motion") 
                     node["alert_history"]['motion'] = current_time
+                    
+                    # ==========================================
+                    # 🚀 NEW: CROSS-NODE TRIGGER LOGIC
+                    # ==========================================
+                    if node_id == "node1" and APP_CONFIG["node1_triggers_main"] == True:
+                        print("🔗 Link Trigger: Node 1 detected motion, sending command to MAIN unit.")
+                        
+                        # Change the payload below to whatever string/JSON your main ESP32 expects
+                        payload = json.dumps({"command": "wake"}) 
+                        client.publish("security/main/command", payload)
 
             # 2. TILT
             tilt_val = data.get('tilt', 0.0)
@@ -511,6 +522,15 @@ def on_mqtt_message(client, userdata, msg):
                     Thread(target=send_telegram_alert, args=(msg_text,)).start()
                     log_event_to_db("gunshot") 
                     node["alert_history"]['gunshot'] = current_time
+                    # ==========================================
+                    # 🚀 NEW: CROSS-NODE TRIGGER LOGIC (GUNSHOT)
+                    # ==========================================
+                    # If node 1 hears a gunshot, and the feature is enabled in settings, wake MAIN
+                    if node_id == "node1" and APP_CONFIG.get("node1_triggers_main") == True:
+                        print("🔗 Link Trigger: Node 1 detected a GUNSHOT! Waking up MAIN unit.")
+                        
+                        payload = json.dumps({"command": "wake"}) 
+                        client.publish("security/main/command", payload)
 
             # 4. MANUAL WAKE
             if data.get('manual_wake') == 1:
@@ -861,8 +881,10 @@ def update_settings():
         # Loop through incoming data and update the config if the key exists
         for key, value in data.items():
             if key in APP_CONFIG:
-                # Ensure we maintain the correct data type (float vs int)
-                if isinstance(APP_CONFIG[key], float):
+                # Ensure we maintain the correct data type (float, int, or bool)
+                if isinstance(APP_CONFIG[key], bool):
+                    APP_CONFIG[key] = bool(value) # <-- NEW: Safely cast booleans
+                elif isinstance(APP_CONFIG[key], float):
                     APP_CONFIG[key] = float(value)
                 elif isinstance(APP_CONFIG[key], int):
                     APP_CONFIG[key] = int(value)
