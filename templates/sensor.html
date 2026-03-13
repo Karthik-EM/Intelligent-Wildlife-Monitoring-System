@@ -302,7 +302,7 @@
 
                 <div class="sensor-grid-row">
                     <div id="tiltBox-main" class="card">
-                        <div class="card-label"><span class="card-icon">📐</span> TILT / TAMPER</div>
+                        <div class="card-label"><span class="card-icon">📐</span> TILT</div>
                         <div class="card-value">--°</div>
                     </div>
                     <div id="motionBox-main" class="card">
@@ -329,7 +329,13 @@
                             </div>
                         </div>
                     </div>
-                    <div class="node-status-dot" id="node-dot-node1"></div>
+                    
+                    <div style="display: flex; align-items: center; gap: 15px;">
+                        <button id="linkToggleBtn" class="btn-wake" onclick="toggleNodeLink()" style="background: #546e7a; border-color: #546e7a; font-size: 0.75rem; padding: 6px 12px;">
+                            <span>🔗</span> Link to Main: OFF
+                        </button>
+                        <div class="node-status-dot" id="node-dot-node1"></div>
+                    </div>
                 </div>
 
                 <div class="sensor-grid-row">
@@ -574,7 +580,75 @@
             btn.innerHTML = originalHTML;
         }, 2000);
     }
+// ==========================================
+    // CROSS-NODE LINK TOGGLE LOGIC
+    // ==========================================
+    let isNodeLinked = false;
 
+    // 1. Fetch the initial state from the server when the page loads
+    async function fetchSettings() {
+        try {
+            const res = await fetch('/api/settings');
+            const data = await res.json();
+            if (data.success && data.settings) {
+                isNodeLinked = data.settings.node1_triggers_main === true;
+                updateLinkBtnUI();
+            }
+        } catch (e) {
+            console.error("Failed to load settings:", e);
+        }
+    }
+
+    // 2. Handle button clicks
+    async function toggleNodeLink() {
+        const btn = document.getElementById('linkToggleBtn');
+        const newState = !isNodeLinked; // Flip the state
+        
+        try {
+            btn.classList.add('loading'); // Use your existing loading CSS class
+            
+            const res = await fetch('/api/settings', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ node1_triggers_main: newState })
+            });
+            const data = await res.json();
+            
+            if(data.success) {
+                isNodeLinked = newState;
+                updateLinkBtnUI();
+                addLog(`Node 1 to Main linking turned ${isNodeLinked ? 'ON' : 'OFF'}`, isNodeLinked ? 'ok' : 'warn');
+            } else {
+                addLog("Failed to update link settings", "danger");
+            }
+        } catch (e) {
+            console.error(e);
+            addLog("Network error updating settings", "danger");
+        }
+        
+        btn.classList.remove('loading');
+    }
+
+    // 3. Update the button colors
+    function updateLinkBtnUI() {
+        const btn = document.getElementById('linkToggleBtn');
+        if (!btn) return;
+        
+        if (isNodeLinked) {
+            btn.innerHTML = '<span>🔗</span> Link to Main: ON';
+            btn.style.background = '#00e676'; // Bright green
+            btn.style.borderColor = '#00e676';
+            btn.style.color = '#1a1a1a'; // Dark text for contrast against green
+        } else {
+            btn.innerHTML = '<span>🔗</span> Link to Main: OFF';
+            btn.style.background = '#546e7a'; // Muted slate grey
+            btn.style.borderColor = '#546e7a';
+            btn.style.color = '#fff';
+        }
+    }
+
+    // Trigger the fetch immediately
+    fetchSettings();
     // --- Load History from Database ---
 // --- Load History from Database ---
     async function loadLogHistory() {
