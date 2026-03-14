@@ -40,7 +40,7 @@ static unsigned long lastHeartbeat = 0;
 // AUDIO & FFT CONFIG (MONO ADAPTIVE)
 // ==========================================
 #define SOFTWARE_GAIN_FACTOR 0.8
-#define TRIGGER_AMP_THRESHOLD 5000
+#define TRIGGER_AMP_THRESHOLD 4000
 #define I2S_SAMPLE_RATE 16000
 #define SAMPLES_PER_CHUNK 256
 
