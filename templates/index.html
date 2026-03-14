@@ -479,19 +479,10 @@ video { width: 100%; display: block; max-height: 500px; }
             <input type="file" id="videoInput" accept="video/*" style="display:none;">
 
             <div class="settings-row">
-                <div class="input-group">
-                    <span class="input-label">Sample FPS</span>
-                    <input type="number" id="sampleFps" value="1" min="0.5" max="5" step="0.5" class="input-pill">
-                </div>
-                <div class="input-group">
-                    <span class="input-label">Min Confidence</span>
-                    <input type="number" id="minConfidence" value="0.3" min="0.1" max="0.9" step="0.1" class="input-pill">
-                </div>
-                
-             <button class="btn primary visible" id="btnStartAnalysis" onclick="uploadVideo()">
-                <span>Start Analysis</span>
-                <span>→</span>
-            </button>
+                <button class="btn primary visible" id="btnStartAnalysis" onclick="uploadVideo()">
+                    <span>Start Analysis</span>
+                    <span>→</span>
+                </button>
             </div>
 
             <div id="videoProgress">
@@ -841,13 +832,28 @@ video { width: 100%; display: block; max-height: 500px; }
         document.getElementById('videoWrapper').style.display = 'block';
     }
 
+    // Add this state variable right above the function
+    let isUploadingVideo = false;
+
     async function uploadVideo() {
+        // Prevent double-clicks
+        if (isUploadingVideo) return; 
+        
         const file = videoInput.files[0];
+        const btn = document.getElementById('btnStartAnalysis');
         const progressBar = document.getElementById('progressFill');
         const progressArea = document.getElementById('videoProgress');
         const resultsArea = document.getElementById('videoResults');
         
         if (!file) { alert('Please select a video first.'); return; }
+        
+        // Lock the UI
+        isUploadingVideo = true;
+        btn.disabled = true;
+        btn.style.opacity = '0.5';
+        btn.style.cursor = 'not-allowed';
+        const originalBtnHTML = btn.innerHTML;
+        btn.innerHTML = '<span>Processing...</span>';
         
         progressArea.style.display = 'block';
         resultsArea.innerHTML = '';
@@ -856,8 +862,7 @@ video { width: 100%; display: block; max-height: 500px; }
         const formData = new FormData();
         formData.append('video', file);
         formData.append('source', 'web');
-        formData.append('sample_fps', document.getElementById('sampleFps').value);
-        formData.append('min_confidence', document.getElementById('minConfidence').value);
+        // NOTE: sample_fps and min_confidence inputs have been completely removed from here
         
         try {
             // Fake progress for UX
@@ -880,21 +885,30 @@ video { width: 100%; display: block; max-height: 500px; }
 
             const data = await response.json();
             
-            setTimeout(() => {
-                progressArea.style.display = 'none';
-                progressBar.style.width = '0%';
-                if (data.success) {
-                    displayVideoResults(data);
-                    resultsArea.scrollIntoView({ behavior: 'smooth' });
-                } else {
-                    alert('Error: ' + (data.error || 'Unknown error'));
-                }
-            }, 500);
+            // Wait half a second for the progress bar to finish its CSS animation
+            await new Promise(resolve => setTimeout(resolve, 500));
+            
+            progressArea.style.display = 'none';
+            progressBar.style.width = '0%';
+
+            if (data.success) {
+                displayVideoResults(data);
+                resultsArea.scrollIntoView({ behavior: 'smooth' });
+            } else {
+                alert('Error: ' + (data.error || 'Unknown error'));
+            }
 
         } catch (e) {
             console.error(e);
             alert('Upload failed: ' + e.message);
             progressArea.style.display = 'none';
+        } finally {
+            // Unlock the UI whether it succeeded or failed
+            isUploadingVideo = false;
+            btn.disabled = false;
+            btn.style.opacity = '1';
+            btn.style.cursor = 'pointer';
+            btn.innerHTML = originalBtnHTML;
         }
     }
 
