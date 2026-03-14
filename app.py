@@ -503,7 +503,7 @@ def on_mqtt_message(client, userdata, msg):
                         print("🔗 Link Trigger: Node 1 detected motion, sending command to MAIN unit.")
                         
                         # Change the payload below to whatever string/JSON your main ESP32 expects
-                        payload = json.dumps({"command": "wake"}) 
+                        payload = "wake" 
                         client.publish("security/main/command", payload)
 
             # 2. TILT
@@ -529,10 +529,10 @@ def on_mqtt_message(client, userdata, msg):
                     if node_id == "node1" and APP_CONFIG.get("node1_triggers_main") == True:
                         print("🔗 Link Trigger: Node 1 detected a GUNSHOT! Waking up MAIN unit.")
                         
-                        payload = json.dumps({"command": "wake"}) 
+                        payload = "wake" 
                         client.publish("security/main/command", payload)
 
-            # 4. MANUAL WAKE
+            # 4. MANUAL WAKEcls
             if data.get('manual_wake') == 1:
                 log_event_to_db("system", value=1.0)
                 print(f"✅ Received ACK: {node_id.upper()} manually awakened.")
