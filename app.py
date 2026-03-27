@@ -42,7 +42,7 @@ ROBOFLOW_API_KEY = os.getenv('ROBOFLOW_API_KEY')
 # --- Dynamic Application Settings (Defaults) ---
 APP_CONFIG = {
     "sensor_cooldown": 5,                # Wait 5 seconds before repeating sensor alerts 
-    "weapon_confidence_threshold": 0.30, # Minimum confidence for weapon detection
+    "weapon_confidence_threshold": 0.50, # Minimum confidence for weapon detection
     "species_confidence_threshold": 0.55, # Minimum confidence for wildlife in video smart filter
     "time_gap_threshold": 5,          # Spam prevention gap per species in video processing
     "esp_timeout": 60 ,            #esp32 disconect time
@@ -436,10 +436,11 @@ def on_mqtt_message(client, userdata, msg):
     node_id = topic_parts[1]
     msg_type = topic_parts[2]
 
-    # If this is a new camera connecting, create a memory profile for it
+# If this is a new camera connecting, create a memory profile for it
     if node_id not in fleet_state:
         fleet_state[node_id] = {
-            "status": {"motion": 0, "tilt": 0.0, "gunshot": 0, "temp": None, "dht_temp": None, "humidity": None, "free_heap": None, "min_heap": None, "rssi": None, "uptime": None},
+            # --- ADDED BATTERY VARIABLES HERE ---
+            "status": {"motion": 0, "tilt": 0.0, "gunshot": 0, "temp": None, "dht_temp": None, "humidity": None, "free_heap": None, "min_heap": None, "rssi": None, "uptime": None, "batt_v": None, "batt_pct": None},
             "last_seen": 0,
             "gunshot_timestamp": 0,
             "alert_history": {"motion": 0, "tilt": 0, "gunshot": 0},
