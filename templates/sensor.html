@@ -294,6 +294,7 @@
                                 <span>LINK: <strong id="val-link-main">WAITING</strong></span>
                                 <span>RSSI: <strong id="val-rssi-main">--</strong></span>
                                 <span>TEMP: <strong id="val-temp-main">--</strong></span>
+                                <span>BATT: <strong id="val-batt-main">--</strong></span>
                             </div>
                         </div>
                     </div>
@@ -326,6 +327,7 @@
                                 <span>LINK: <strong id="val-link-node1">WAITING</strong></span>
                                 <span>RSSI: <strong id="val-rssi-node1">--</strong></span>
                                 <span>TEMP: <strong id="val-temp-node1">--</strong></span>
+                                <span>BATT: <strong id="val-batt-main">--</strong></span>
                             </div>
                         </div>
                     </div>
@@ -433,7 +435,7 @@
             const valLink = document.getElementById(`val-link-${nId}`);
             const valRssi = document.getElementById(`val-rssi-${nId}`);
             const valTemp = document.getElementById(`val-temp-${nId}`);
-
+            const valBatt = document.getElementById(`val-batt-${nId}`);
             const nodePrefix = `[${nId.toUpperCase()}]`;
 
             // 1. Connection Logic & Header Data
@@ -454,8 +456,13 @@
                 
                 const temp = (data.temp !== null && data.temp !== undefined) ? Number(data.temp).toFixed(1) + "°C" : "--";
                 const rssi = (data.rssi !== null && data.rssi !== undefined) ? data.rssi + "dBm" : "--";
+                let battStr = "--";
+                if (data.batt_v !== null && data.batt_v !== undefined && data.batt_pct !== null && data.batt_pct !== undefined) {
+                    battStr = `${Number(data.batt_pct).toFixed(0)}% (${Number(data.batt_v).toFixed(2)}V)`;
+                }
                 if(valRssi) valRssi.textContent = rssi;
                 if(valTemp) valTemp.textContent = temp;
+                if(valBatt) valBatt.textContent = battStr;
                 // --- NEW: CLIMATE CARD FOR NODE 1 ---
                 if (nId === "node1") {
                     const dhtTemp = (data.dht_temp !== null && data.dht_temp !== undefined) ? Number(data.dht_temp).toFixed(1) + "°C" : "--";
@@ -537,7 +544,7 @@
                 if(valLink) { valLink.textContent = "OFFLINE"; valLink.style.color = "#546e7a"; }
                 if(valRssi) valRssi.textContent = "--";
                 if(valTemp) valTemp.textContent = "--";
-
+                if(valBatt) valBatt.textContent = "--";
                 updateCard(`tiltBox-${nId}`, 'offline', '--');
                 updateCard(`envBox-${nId}`, 'offline', '-- / --');
                 updateCard(`motionBox-${nId}`, 'offline', '--');
