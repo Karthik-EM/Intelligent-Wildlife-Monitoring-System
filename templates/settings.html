@@ -49,7 +49,7 @@
 
         .dashboard-wrapper {
             width: 100%;
-            max-width: 1400px; /* Streamlined width for list view */
+            max-width: 1400px;
             display: flex;
             flex-direction: column;
         }
@@ -103,6 +103,15 @@
             min-width: 60px; text-align: right; font-variant-numeric: tabular-nums;
         }
 
+        /* Custom Text Inputs */
+        input[type=text] {
+            font-family: inherit; font-size: 1rem; font-weight: 700; color: #1a1a1a;
+            background: #fff; border: 2px solid #ccc; border-radius: 8px;
+            padding: 10px 14px; width: 100%; max-width: 300px; outline: none;
+            transition: all 0.2s ease;
+        }
+        input[type=text]:focus { border-color: #1a1a1a; box-shadow: 0 2px 8px rgba(0,0,0,0.05); }
+
         /* Custom Sliders */
         input[type=range] {
             -webkit-appearance: none; width: 100%; background: transparent; flex: 1;
@@ -146,6 +155,7 @@
             .setting-row { grid-template-columns: 1fr; gap: 1rem; }
             .action-group { flex-direction: column; }
             .page-header { flex-direction: column; align-items: flex-start; gap: 1.5rem; }
+            .setting-control { justify-content: flex-start !important; }
         }
     </style>
 </head>
@@ -239,6 +249,30 @@
             </div>
         </div>
 
+        <div class="settings-section">
+            <div class="section-title" style="color: #1976d2;">Fleet Locations</div>
+            
+            <div class="setting-row">
+                <div class="setting-info">
+                    <div class="setting-name">Main Unit Location</div>
+                    <div class="setting-desc">Physical placement label for Node 0 (Main).</div>
+                </div>
+                <div class="setting-control" style="justify-content: flex-end;">
+                    <input type="text" id="input-loc-main" placeholder="e.g., Front Gate">
+                </div>
+            </div>
+
+            <div class="setting-row">
+                <div class="setting-info">
+                    <div class="setting-name">Node 1 Location</div>
+                    <div class="setting-desc">Physical placement label for the auxiliary Node 1 unit.</div>
+                </div>
+                <div class="setting-control" style="justify-content: flex-end;">
+                    <input type="text" id="input-loc-node1" placeholder="e.g., North Fence">
+                </div>
+            </div>
+        </div>
+
     </div>
 </div>
 
@@ -248,7 +282,9 @@
         weapon: 30,
         wildlife: 55,
         cooldown: 5,
-        spam: 5
+        spam: 5,
+        loc_main: "Unassigned",  // New default
+        loc_node1: "Unassigned"  // New default
     };
 
     // --- Update Number Display when Sliding ---
@@ -264,10 +300,15 @@
             const data = await res.json();
             
             if (data.success && data.settings) {
+                // Sliders
                 document.getElementById('input-weapon').value = Math.round(data.settings.weapon_confidence_threshold * 100);
                 document.getElementById('input-wildlife').value = Math.round(data.settings.species_confidence_threshold * 100);
                 document.getElementById('input-cooldown').value = data.settings.sensor_cooldown;
                 document.getElementById('input-spam').value = data.settings.time_gap_threshold;
+
+                // Locations
+                document.getElementById('input-loc-main').value = data.settings.location_main || "Unassigned";
+                document.getElementById('input-loc-node1').value = data.settings.location_node1 || "Unassigned";
 
                 refreshAllDisplays();
             }
@@ -279,10 +320,15 @@
     // --- Reset Settings to Defaults ---
     function resetDefaults() {
         if(confirm("Are you sure you want to reset all settings to their original values?")) {
+            // Sliders
             document.getElementById('input-weapon').value = DEFAULTS.weapon;
             document.getElementById('input-wildlife').value = DEFAULTS.wildlife;
             document.getElementById('input-cooldown').value = DEFAULTS.cooldown;
             document.getElementById('input-spam').value = DEFAULTS.spam;
+
+            // Locations
+            document.getElementById('input-loc-main').value = DEFAULTS.loc_main;
+            document.getElementById('input-loc-node1').value = DEFAULTS.loc_node1;
 
             refreshAllDisplays();
             saveSettings(); // Automatically save the defaults to backend
@@ -306,10 +352,14 @@
             btn.innerHTML = '<span>⏳</span> Saving...';
 
             const payload = {
+                // Slider values
                 weapon_confidence_threshold: parseInt(document.getElementById('input-weapon').value) / 100.0,
                 species_confidence_threshold: parseInt(document.getElementById('input-wildlife').value) / 100.0,
                 sensor_cooldown: parseInt(document.getElementById('input-cooldown').value),
-                time_gap_threshold: parseInt(document.getElementById('input-spam').value)
+                time_gap_threshold: parseInt(document.getElementById('input-spam').value),
+                // Location values (Sent as strings directly to backend)
+                location_main: document.getElementById('input-loc-main').value,
+                location_node1: document.getElementById('input-loc-node1').value
             };
 
             const res = await fetch('/api/settings', {
