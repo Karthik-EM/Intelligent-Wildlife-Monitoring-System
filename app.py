@@ -47,7 +47,10 @@ APP_CONFIG = {
     "time_gap_threshold": 5,          # Spam prevention gap per species in video processing
     "esp_timeout": 60 ,            #esp32 disconect time
     "gunshot_alert_duration": 3,    # How many seconds the gunshot alert stays RED
-    "node1_triggers_main": False
+    "node1_triggers_main": False,
+    # --- NEW: DEFAULT LOCATIONS ---
+    "location_main": "Unassigned",
+    "location_node1": "Unassigned"
 }
 
 
@@ -136,7 +139,11 @@ class SensorEvent(db.Model):
     event_type = db.Column(db.String(50), nullable=False)  # e.g., 'motion', 'tilt', 'gunshot'
     value = db.Column(db.Float, nullable=True)             # e.g., the specific tilt angle
     timestamp = db.Column(db.DateTime, default=datetime.utcnow)
-
+class NodeConfig(db.Model):
+    """Database table to permanently store node settings like Location."""
+    id = db.Column(db.Integer, primary_key=True)
+    node_id = db.Column(db.String(50), unique=True, nullable=False)
+    location = db.Column(db.String(100), default="Unassigned")
 # Create the database file if it doesn't exist
 with app.app_context(): db.create_all()
 
@@ -438,8 +445,17 @@ def on_mqtt_message(client, userdata, msg):
 
 # If this is a new camera connecting, create a memory profile for it
     if node_id not in fleet_state:
+        # Fetch the saved location from the Database
+        with app.app_context():
+            node_db = NodeConfig.query.filter_by(node_id=node_id).first()
+            if not node_db:
+                node_db = NodeConfig(node_id=node_id, location="Unassigned")
+                db.session.add(node_db)
+                db.session.commit()
+            saved_location = node_db.location
+
         fleet_state[node_id] = {
-            # --- ADDED BATTERY VARIABLES HERE ---
+            "location": saved_location, # <-- Store location in active memory
             "status": {"motion": 0, "tilt": 0.0, "gunshot": 0, "temp": None, "dht_temp": None, "humidity": None, "free_heap": None, "min_heap": None, "rssi": None, "uptime": None, "batt_v": None, "batt_pct": None},
             "last_seen": 0,
             "gunshot_timestamp": 0,
@@ -480,6 +496,7 @@ def on_mqtt_message(client, userdata, msg):
         with app.app_context():
             socketio.emit('sensor_update', {
                 "node_id": node_id,
+                "location": node["location"],
                 **node["status"],
                 "esp_online": True,
                 "gunshot": 1 if (current_time - node["gunshot_timestamp"]) < APP_CONFIG["gunshot_alert_duration"] else 0,
@@ -873,7 +890,7 @@ def get_settings():
 
 @app.route('/api/settings', methods=['POST'])
 def update_settings():
-    """Allows the frontend to update the dynamic settings."""
+    """Allows the frontend to update the dynamic settings and node locations."""
     try:
         data = request.json
         if not data:
@@ -882,14 +899,39 @@ def update_settings():
         # Loop through incoming data and update the config if the key exists
         for key, value in data.items():
             if key in APP_CONFIG:
-                # Ensure we maintain the correct data type (float, int, or bool)
+                # Ensure we maintain the correct data type (float, int, bool, or str)
                 if isinstance(APP_CONFIG[key], bool):
-                    APP_CONFIG[key] = bool(value) # <-- NEW: Safely cast booleans
+                    APP_CONFIG[key] = bool(value) 
                 elif isinstance(APP_CONFIG[key], float):
                     APP_CONFIG[key] = float(value)
                 elif isinstance(APP_CONFIG[key], int):
                     APP_CONFIG[key] = int(value)
-        
+                elif isinstance(APP_CONFIG[key], str):
+                    APP_CONFIG[key] = str(value).strip()
+
+                # ==========================================
+                # 🚀 NEW: INTERCEPT LOCATIONS FOR DATABASE
+                # ==========================================
+                if key.startswith("location_"):
+                    # Extract the node_id (e.g., "location_main" becomes "main")
+                    node_id = key.replace("location_", "") 
+                    new_location = str(value).strip()
+                    
+                    # 1. Update SQLite Database permanently
+                    config = NodeConfig.query.filter_by(node_id=node_id).first()
+                    if not config:
+                        config = NodeConfig(node_id=node_id, location=new_location)
+                        db.session.add(config)
+                    else:
+                        config.location = new_location
+                    db.session.commit()
+                    
+                    # 2. Update Active Memory for instant WebSocket broadcast
+                    if node_id in fleet_state:
+                        fleet_state[node_id]["location"] = new_location
+                        
+                    print(f"📍 Database Updated: {node_id.upper()} location saved as '{new_location}'")
+
         print(f"⚙️ Settings updated via API: {APP_CONFIG}")
         return jsonify({"success": True, "settings": APP_CONFIG})
     except Exception as e:
@@ -917,6 +959,7 @@ def watchdog_monitor():
                     with app.app_context():
                         socketio.emit('sensor_update', {
                             "node_id": node_id,
+                            "location": node["location"],
                             **node["status"],
                             "esp_online": is_online,
                             "gunshot": 1 if (current_time - node["gunshot_timestamp"]) < APP_CONFIG["gunshot_alert_duration"] else 0,
