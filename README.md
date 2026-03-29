@@ -33,17 +33,17 @@ py -3.10 -m venv venv
 
 *(Note: You must run `.\venv\Scripts\activate` every time you open a new terminal to work on this project).*
 
-### Install `requirements.txt and CUDA  11.8`
+### Install `CUDA  11.8  and requirements.txt `
 
-Install everything by running:
-
-```powershell
-pip install -r requirements.txt
-```
 NVIDIA GPU (CUDA 11.8)
 ```powershell
 pip install torch torchvision --index-url https://download.pytorch.org/whl/cu118
 
+```
+Install everything by running:
+
+```powershell
+pip install -r requirements.txt
 ```
 
 ---
