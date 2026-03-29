@@ -966,7 +966,7 @@ def watchdog_monitor():
         current_time = time.time()
         
         # Check every camera in our memory
-        for node_id, node in fleet_state.items():
+        for node_id, node in list(fleet_state.items()):
             is_online = (current_time - node["last_seen"]) < APP_CONFIG["esp_timeout"] and node["last_seen"] != 0
             
             # If the state changed (it just went offline, or just came back online)
