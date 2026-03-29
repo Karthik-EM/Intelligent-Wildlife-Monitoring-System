@@ -343,45 +343,49 @@ class BatchVideoProcessor:
                     weapon_conf = 0.0
 
                     # Read original image to draw boxes and resize
+                    # Read original image to draw boxes and resize
                     if os.path.exists(path_key):
                         img = cv2.imread(path_key)
                         if img is not None:
                             # 🚀 PERFORMANCE FIX: Resize the image BEFORE making the CPU think
                             h, w = img.shape[:2]
+                            
                             if w > 640:
                                 scale = 640 / w
                                 img = cv2.resize(img, (640, int(h * scale)))
-                                # --- STAGE 2: WEAPON DETECTION (CPU) ---
-                                if common_name.lower() == "human" and (time_sec - video_state["last_gun_time"]) > 3.0:
-                                    print(f"👤 Human spotted at {time_sec:.1f}s. Running Weapon Scan on CPU...")
+                                
+                            # --- STAGE 2: WEAPON DETECTION (CPU) ---
+                            
+                            if common_name.lower() == "human" and (time_sec - video_state["last_gun_time"]) > 3.0:
+                                print(f"👤 Human spotted at {time_sec:.1f}s. Running Weapon Scan on CPU...")
+                                
+                                # Run YOLO inference explicitly on CPU
+                                weapon_res = self.model_manager.weapon_model.predict(
+                                    source=img, 
+                                    conf=APP_CONFIG["weapon_confidence_threshold"], 
+                                    device="cpu", 
+                                    verbose=False
+                                )
+                                boxes = weapon_res[0].boxes
+                                
+                                # If weapon found...
+                                if len(boxes) > 0:
+                                    print("🚨 LETHAL WEAPON DETECTED!")
+                                    video_state["last_gun_time"] = time_sec 
+                                    is_weapon_threat = True
+                                    weapon_conf = float(boxes.conf[0]) # Confidence of top detection
                                     
-                                    # Run YOLO inference explicitly on CPU
-                                    weapon_res = self.model_manager.weapon_model.predict(
-                                        source=img, 
-                                        conf=APP_CONFIG["weapon_confidence_threshold"], 
-                                        device="cpu", 
-                                        verbose=False
-                                    )
-                                    boxes = weapon_res[0].boxes
-                                    
-                                    # If weapon found...
-                                    if len(boxes) > 0:
-                                        print("🚨 LETHAL WEAPON DETECTED!")
-                                        video_state["last_gun_time"] = time_sec 
-                                        is_weapon_threat = True
-                                        weapon_conf = float(boxes.conf[0]) # Confidence of top detection
+                                    # Draw Red Bounding Boxes on the image
+                                    for box in boxes:
+                                        x1, y1, x2, y2 = map(int, box.xyxy[0])
+                                        conf = float(box.conf[0])
+                                        cls_id = int(box.cls[0])
+                                        class_name = weapon_res[0].names[cls_id]
                                         
-                                        # Draw Red Bounding Boxes on the image
-                                        for box in boxes:
-                                            x1, y1, x2, y2 = map(int, box.xyxy[0])
-                                            conf = float(box.conf[0])
-                                            cls_id = int(box.cls[0])
-                                            class_name = weapon_res[0].names[cls_id]
-                                            
-                                            label = f"{class_name} {conf:.2f}"
-                                            cv2.rectangle(img, (x1, y1), (x2, y2), (0, 0, 255), 2) # Red Box
-                                            cv2.putText(img, label, (x1, max(y1 - 10, 10)), cv2.FONT_HERSHEY_SIMPLEX, 0.5, (0, 0, 255), 2)
-                                    
+                                        label = f"{class_name} {conf:.2f}"
+                                        cv2.rectangle(img, (x1, y1), (x2, y2), (0, 0, 255), 2) # Red Box
+                                        cv2.putText(img, label, (x1, max(y1 - 10, 10)), cv2.FONT_HERSHEY_SIMPLEX, 0.5, (0, 0, 255), 2)
+                                
                                     # Send Telegram Alert (ONLY ONCE per video to prevent spam)
                                     if not video_state["alert_sent"]:
                                         # Pulling the main location from APP_CONFIG 👇
@@ -394,8 +398,7 @@ class BatchVideoProcessor:
                             cv2.imwrite(save_path, img)
                             image_url = f"/static/detections/{unique_name}"
                             
-                            # Standard Wildlife Telegram Alert (Ignores humans to prevent spam)
-# Standard Wildlife Telegram Alert (Ignores humans and empty frames)
+                            # Standard Wildlife Telegram Alert (Ignores humans and empty frames)
                             excluded_categories = ["human", "blank", "unknown", "none"]       
                             if top_score > 0.75 and not is_weapon_threat and common_name.lower() not in excluded_categories:
                                 last_alert = alert_history.get(common_name, -999)
@@ -403,8 +406,8 @@ class BatchVideoProcessor:
                                     msg = f"🐾 *WILDLIFE SIGHTING*\n\n🦁 *Species:* {common_name}\n🎯 *Confidence:* {top_score:.1%}\n⏱️ *Video Time:* {int(time_sec)}s"
                                     Thread(target=send_telegram_alert, args=(msg,)).start()
                                     alert_history[common_name] = time_sec
-                    # Log the original SpeciesNet detection to the database
-                   # Log the original SpeciesNet detection to the database (excluding blanks)
+                                    
+                    # Log the original SpeciesNet detection to the database (excluding blanks)
                     # If it's a human WITH a weapon, completely override the normal human log
                     if is_weapon_threat:
                         valid_detections.append({
