@@ -27,7 +27,7 @@ from flask_sqlalchemy import SQLAlchemy
 from datetime import datetime
 from dotenv import load_dotenv
 # AI Model imports
-from inference import get_model
+from ultralytics import YOLO
 from flask_socketio import SocketIO
 # ==========================================
 # 1. INITIALIZATION & SETUP
@@ -187,8 +187,9 @@ class ModelManager:
             print("✅ SpeciesNet Loaded Successfully (GPU)")
             
             # 2. Load Weapon Model to CPU
-            print("⏳ Loading Weapon Model...")
-            self.weapon_model = get_model(model_id="rifle-1b8vx/2", api_key=ROBOFLOW_API_KEY)
+            print("⏳ Loading Custom Weapon Model...")
+            weapon_model_path = os.path.join(BASE_DIR, "weapon_model.onnx")
+            self.weapon_model = YOLO(weapon_model_path)
             print("✅ Weapon Model Loaded Successfully (CPU)")
             
             self._warmup()
@@ -350,33 +351,36 @@ class BatchVideoProcessor:
                             if w > 640:
                                 scale = 640 / w
                                 img = cv2.resize(img, (640, int(h * scale)))
-                            # --- STAGE 2: WEAPON DETECTION (CPU) ---
-                            # Rules: Only run if it's a Human AND 3 seconds have passed since last gun detection
-                            if common_name.lower() == "human" and (time_sec - video_state["last_gun_time"]) > 3.0:
-                                print(f"👤 Human spotted at {time_sec:.1f}s. Running Weapon Scan on CPU...")
-                                
-                                # Run inference on the Intel i5 CPU
-                                weapon_res = self.model_manager.weapon_model.infer(img,confidence=APP_CONFIG["weapon_confidence_threshold"])
-                                
-                                # If weapon found...
-                                if len(weapon_res[0].predictions) > 0:
-                                    print("🚨 LETHAL WEAPON DETECTED!")
+                                # --- STAGE 2: WEAPON DETECTION (CPU) ---
+                                if common_name.lower() == "human" and (time_sec - video_state["last_gun_time"]) > 3.0:
+                                    print(f"👤 Human spotted at {time_sec:.1f}s. Running Weapon Scan on CPU...")
                                     
-                                    # Reset the 3-second cooldown timer
-                                    video_state["last_gun_time"] = time_sec 
-                                    is_weapon_threat = True
-                                    weapon_conf = float(weapon_res[0].predictions[0].confidence)
+                                    # Run YOLO inference explicitly on CPU
+                                    weapon_res = self.model_manager.weapon_model.predict(
+                                        source=img, 
+                                        conf=APP_CONFIG["weapon_confidence_threshold"], 
+                                        device="cpu", 
+                                        verbose=False
+                                    )
+                                    boxes = weapon_res[0].boxes
                                     
-                                    # Draw Red Bounding Boxes on the image
-                                    for pred in weapon_res[0].predictions:
-                                        x1 = int(pred.x - (pred.width / 2))
-                                        y1 = int(pred.y - (pred.height / 2))
-                                        x2 = int(pred.x + (pred.width / 2))
-                                        y2 = int(pred.y + (pred.height / 2))
-                                        label = f"{pred.class_name} {pred.confidence:.2f}"
+                                    # If weapon found...
+                                    if len(boxes) > 0:
+                                        print("🚨 LETHAL WEAPON DETECTED!")
+                                        video_state["last_gun_time"] = time_sec 
+                                        is_weapon_threat = True
+                                        weapon_conf = float(boxes.conf[0]) # Confidence of top detection
                                         
-                                        cv2.rectangle(img, (x1, y1), (x2, y2), (0, 0, 255), 2) # Red Box
-                                        cv2.putText(img, label, (x1, max(y1 - 10, 10)), cv2.FONT_HERSHEY_SIMPLEX, 0.5, (0, 0, 255), 2)
+                                        # Draw Red Bounding Boxes on the image
+                                        for box in boxes:
+                                            x1, y1, x2, y2 = map(int, box.xyxy[0])
+                                            conf = float(box.conf[0])
+                                            cls_id = int(box.cls[0])
+                                            class_name = weapon_res[0].names[cls_id]
+                                            
+                                            label = f"{class_name} {conf:.2f}"
+                                            cv2.rectangle(img, (x1, y1), (x2, y2), (0, 0, 255), 2) # Red Box
+                                            cv2.putText(img, label, (x1, max(y1 - 10, 10)), cv2.FONT_HERSHEY_SIMPLEX, 0.5, (0, 0, 255), 2)
                                     
                                     # Send Telegram Alert (ONLY ONCE per video to prevent spam)
                                     if not video_state["alert_sent"]:
@@ -725,25 +729,35 @@ def detect():
                         img = cv2.resize(img, (640, int(h * scale)))
                     
                     try:
-                        # Run Weapon Model on Intel i5
-                        weapon_res = model_manager.weapon_model.infer(img,confidence=APP_CONFIG["weapon_confidence_threshold"])
+                        # 1. Run YOLO Weapon Model explicitly on CPU
+                        weapon_res = model_manager.weapon_model.predict(
+                            source=img, 
+                            conf=APP_CONFIG["weapon_confidence_threshold"], 
+                            device="cpu", 
+                            verbose=False
+                        )
+                        
+                        # YOLO stores detections inside the 'boxes' attribute
+                        boxes = weapon_res[0].boxes
                         
                         # Debug Print 2: See how many weapons the CPU found
-                        print(f"🎯 Weapon scan complete. Found {len(weapon_res[0].predictions)} threats.")
+                        print(f"🎯 Weapon scan complete. Found {len(boxes)} threats.")
                         
-                        if len(weapon_res[0].predictions) > 0:
+                        if len(boxes) > 0:
                             print("🚨 LETHAL WEAPON DETECTED in UI upload! Drawing boxes...")
                             species = "ARMED HUMAN"
                             scientific = "Lethal Threat Detected"
-                            top_score = float(weapon_res[0].predictions[0].confidence)
+                            top_score = float(boxes.conf[0]) # Confidence of the highest scoring box
                             
                             # Draw Red Bounding Boxes
-                            for pred in weapon_res[0].predictions:
-                                x1 = int(pred.x - (pred.width / 2))
-                                y1 = int(pred.y - (pred.height / 2))
-                                x2 = int(pred.x + (pred.width / 2))
-                                y2 = int(pred.y + (pred.height / 2))
-                                label = f"{pred.class_name} {pred.confidence:.2f}"
+                            for box in boxes:
+                                # YOLO gives us the exact corner coordinates right out of the box
+                                x1, y1, x2, y2 = map(int, box.xyxy[0])
+                                conf = float(box.conf[0])
+                                cls_id = int(box.cls[0])
+                                class_name = weapon_res[0].names[cls_id]
+                                
+                                label = f"{class_name} {conf:.2f}"
                                 cv2.rectangle(img, (x1, y1), (x2, y2), (0, 0, 255), 2)
                                 cv2.putText(img, label, (x1, max(y1 - 10, 10)), cv2.FONT_HERSHEY_SIMPLEX, 0.5, (0, 0, 255), 2)
                             
