@@ -380,9 +380,11 @@ class BatchVideoProcessor:
                                     
                                     # Send Telegram Alert (ONLY ONCE per video to prevent spam)
                                     if not video_state["alert_sent"]:
-                                        msg = f"🚨 *LETHAL WEAPON DETECTED* 🚨\n\n🎯 *Threat:* Armed Human\n⏱️ *Video Time:* {int(time_sec)}s\n📍 *Unit:* Field Cam 01"
+                                        # Pulling the main location from APP_CONFIG 👇
+                                        cam_location = APP_CONFIG.get("location_main", "Unknown")
+                                        msg = f"🚨 *LETHAL WEAPON DETECTED* 🚨\n\n🎯 *Threat:* Armed Human\n⏱️ *Video Time:* {int(time_sec)}s\n📍 *Unit:* Main Camera\n🌍 *Location:* {cam_location}"
                                         Thread(target=send_telegram_alert, args=(msg,)).start()
-                                        video_state["alert_sent"] = True 
+                                        video_state["alert_sent"] = True
                             
                             # Save final image to static folder
                             cv2.imwrite(save_path, img)
@@ -506,10 +508,11 @@ def on_mqtt_message(client, userdata, msg):
         # Process Sensor Alerts
         if msg_type == "events":
             
-            # 1. MOTION
+           # 1. MOTION
             if data.get('motion') == 1:
                 if (current_time - node["alert_history"]['motion']) > APP_CONFIG["sensor_cooldown"]:
-                    msg_text = f"🏃 *MOTION DETECTED* 🏃\n\n⏱️ *Time:* {datetime.now().strftime('%H:%M:%S')}\n📍 *Unit:* {node_id.upper()}"
+                    # Added Location here 👇
+                    msg_text = f"🏃 *MOTION DETECTED* 🏃\n\n⏱️ *Time:* {datetime.now().strftime('%H:%M:%S')}\n📍 *Unit:* {node_id.upper()}\n🌍 *Location:* {node['location']}"
                     Thread(target=send_telegram_alert, args=(msg_text,)).start()
                     log_event_to_db("motion") 
                     node["alert_history"]['motion'] = current_time
@@ -528,7 +531,8 @@ def on_mqtt_message(client, userdata, msg):
             tilt_val = data.get('tilt', 0.0)
             if tilt_val > 30: 
                 if (current_time - node["alert_history"]['tilt']) > APP_CONFIG["sensor_cooldown"]:
-                    msg_text = f"⚠️ *DEVICE TILT WARNING* ⚠️\n\n📉 *Angle:* {tilt_val}°\n📍 *Unit:* {node_id.upper()}"
+                    # Added Location here 👇
+                    msg_text = f"⚠️ *DEVICE TILT WARNING* ⚠️\n\n📉 *Angle:* {tilt_val}°\n📍 *Unit:* {node_id.upper()}\n🌍 *Location:* {node['location']}"
                     Thread(target=send_telegram_alert, args=(msg_text,)).start()
                     log_event_to_db("tilt", tilt_val) 
                     node["alert_history"]['tilt'] = current_time
@@ -536,7 +540,8 @@ def on_mqtt_message(client, userdata, msg):
             # 3. GUNSHOT
             if data.get('gunshot') == 1: 
                 if (current_time - node["alert_history"]['gunshot']) > 1:
-                    msg_text = f"🔥 *GUNSHOT DETECTED* 🔥\n\n⏱️ *Time:* {datetime.now().strftime('%H:%M:%S')}\n📍 *Unit:* {node_id.upper()}\n*IMMEDIATE ACTION REQUIRED*"
+                    # Added Location here 👇
+                    msg_text = f"🔥 *GUNSHOT DETECTED* 🔥\n\n⏱️ *Time:* {datetime.now().strftime('%H:%M:%S')}\n📍 *Unit:* {node_id.upper()}\n🌍 *Location:* {node['location']}\n*IMMEDIATE ACTION REQUIRED*"
                     Thread(target=send_telegram_alert, args=(msg_text,)).start()
                     log_event_to_db("gunshot") 
                     node["alert_history"]['gunshot'] = current_time
