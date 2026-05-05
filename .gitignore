@@ -25,6 +25,6 @@ static/detections/
 
 # Ignore test file
 testweapon.py
-
+best.onnx
 # Ignore folder
 speciesnet_model/
