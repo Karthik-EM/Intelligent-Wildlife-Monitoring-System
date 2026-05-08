@@ -42,7 +42,7 @@ ROBOFLOW_API_KEY = os.getenv('ROBOFLOW_API_KEY')
 # --- Dynamic Application Settings (Defaults) ---
 APP_CONFIG = {
     "sensor_cooldown": 5,                # Wait 5 seconds before repeating sensor alerts 
-    "weapon_confidence_threshold": 0.50, # Minimum confidence for weapon detection
+    "weapon_confidence_threshold": 0.60, # Minimum confidence for weapon detection
     "species_confidence_threshold": 0.55, # Minimum confidence for wildlife in video smart filter
     "time_gap_threshold": 5,          # Spam prevention gap per species in video processing
     "esp_timeout": 63 ,            #esp32 disconect time
