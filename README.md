@@ -108,10 +108,6 @@ This project integrates Google’s SpeciesNet for wildlife classification with a
       <td>Wi-Fi Config Button</td>
       <td>GPIO 5</td>
     </tr>
-    <tr>
-      <td>Control Output</td>
-      <td>GPIO 26</td>
-    </tr>
   </tbody>
 </table>
 
@@ -131,7 +127,7 @@ This project integrates Google’s SpeciesNet for wildlife classification with a
       <td>GPIO 27</td>
     </tr>
     <tr>
-      <td>RCWL Motion Sensor</td>
+      <td>HLK-LD105 Motion Sensor</td>
       <td>GPIO 25</td>
     </tr>
     <tr>
