@@ -3,6 +3,13 @@
 
 This project integrates Google’s SpeciesNet for wildlife classification with a  weapon detection model (YoloV26s) and a real-time MQTT sensor dashboard to monitor remote field cameras, detect threats, and trigger instant Telegram alerts.
 
+## System Architecture
+
+![Workflow Diagram](assets/flowchart.jpg)
+
+<p align="center"><em>Overview of the system</em></p>
+
+
 ## Hardware Setup
 
 <table align="center">
